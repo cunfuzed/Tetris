@@ -1,0 +1,2263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tetris</title>
+  <style>
+    :root {
+      --bg-color: #0b0c10;
+      --card-bg: #151821;
+      --accent-color: #ff0055;
+      --accent-glow: rgba(255, 0, 85, 0.4);
+      --text-main: #f0f4f8;
+      --text-muted: #8a94a6;
+      --border-color: #262b38;
+      --gold-color: #ffcc00;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 20px 10px;
+      user-select: none;
+    }
+
+    h1 {
+      margin-bottom: 16px;
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: 3px;
+      color: var(--accent-color);
+      text-shadow: 0 0 15px var(--accent-glow);
+      text-transform: uppercase;
+    }
+
+    .controls-panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 18px;
+      margin-bottom: 20px;
+      background: var(--card-bg);
+      padding: 12px 24px;
+      border-radius: 12px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      max-width: 1000px;
+      width: 100%;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .val-display {
+      color: var(--accent-color);
+      font-weight: 700;
+      min-width: 32px;
+      display: inline-block;
+    }
+
+    select, input, button, textarea {
+      background: #1e2330;
+      color: var(--text-main);
+      border: 1px solid var(--border-color);
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.15s ease-in-out;
+    }
+
+    select:hover, input:hover {
+      border-color: #3b4254;
+    }
+
+    select:focus, input:focus, textarea:focus {
+      border-color: var(--accent-color);
+      box-shadow: 0 0 8px var(--accent-glow);
+    }
+
+    input[type="number"] { width: 68px; }
+    input[type="range"] {
+      width: 100px;
+      accent-color: var(--accent-color);
+      cursor: pointer;
+    }
+
+    button {
+      background: linear-gradient(135deg, #252b3b, #1b1f2b);
+      border: 1px solid #3a4257;
+      color: #fff;
+      font-weight: 700;
+      padding: 7px 14px;
+    }
+
+    button:hover {
+      background: var(--accent-color);
+      border-color: var(--accent-color);
+      box-shadow: 0 0 12px var(--accent-glow);
+      transform: translateY(-1px);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    .game-layout {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+      justify-content: center;
+      position: relative;
+      width: 100%;
+      max-width: 1100px;
+    }
+
+    .board-container {
+      display: flex;
+      gap: 12px;
+      background: var(--card-bg);
+      padding: 16px;
+      border-radius: 14px;
+      border: 1px solid var(--border-color);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
+      position: relative;
+      align-items: flex-start; /* Ensures side panel growth won't stretch surrounding elements */
+      transition: transform 0.2s ease;
+    }
+
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 96px;
+    }
+
+    .panel-box {
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 5px;
+      text-align: center;
+    }
+
+    .panel-box h3 {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .stat-value {
+      font-size: 0.95rem;
+      font-weight: 800;
+      color: #ffffff;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .action-feed {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent-color);
+      height: 30px; /* Fixed height locks panel size during multi-line actions */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      line-height: 1.1;
+      word-break: break-word;
+      overflow: hidden;
+    }
+
+    .surge-badge {
+      color: var(--gold-color);
+      font-weight: 800;
+      font-size: 0.8rem;
+      text-shadow: 0 0 8px rgba(255, 204, 0, 0.6);
+    }
+
+    .surge-meter-container {
+      width: 100%;
+      height: 5px;
+      background: #11141c;
+      border-radius: 3px;
+      margin-top: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+
+    .surge-meter-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #ff9900, var(--accent-color));
+      transition: width 0.15s ease-out;
+      box-shadow: 0 0 8px var(--accent-color);
+    }
+
+    .surge-flash {
+      animation: surgePulse 0.4s ease-out;
+    }
+
+    @keyframes surgePulse {
+      0% { box-shadow: 0 0 35px var(--accent-color), inset 0 0 20px var(--accent-color); }
+      100% { box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6); }
+    }
+
+    canvas {
+      background-color: #0d0e12;
+      border-radius: 6px;
+      display: block;
+      box-sizing: content-box; /* Prevents CSS borders from distorting canvas bitmap */
+    }
+
+    .canvas-board {
+      border: 2px solid #262b38;
+      box-shadow: inset 0 0 15px rgba(0, 0, 0, 0.8);
+      position: relative;
+      z-index: 2;
+    }
+
+    .garbage-meter {
+      width: 10px;
+      height: 480px;
+      background: #11141c;
+      border-radius: 5px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+    }
+
+    .garbage-fill {
+      position: absolute;
+      bottom: 0;
+      width: 100%;
+      height: 0%;
+      background: linear-gradient(180deg, #ff4d4d, #cc0000);
+      box-shadow: 0 0 10px #ff0000;
+      transition: height 0.12s ease-out;
+    }
+
+    .hidden { display: none !important; }
+
+    #game-over-overlay, #countdown-overlay, #genome-modal {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(11, 12, 16, 0.88);
+      backdrop-filter: blur(4px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 10;
+      border-radius: 14px;
+    }
+
+    #genome-modal {
+      z-index: 20;
+      padding: 20px;
+    }
+
+    #genome-modal textarea {
+      width: 80%;
+      height: 240px;
+      font-family: monospace;
+      font-size: 0.85rem;
+      margin-bottom: 12px;
+      resize: none;
+    }
+
+    #countdown-overlay {
+      background: rgba(11, 12, 16, 0.65);
+      pointer-events: none;
+    }
+
+    #countdown-text {
+      font-size: 4.5rem;
+      font-weight: 900;
+      color: var(--gold-color);
+      text-shadow: 0 0 25px var(--accent-color);
+      animation: popIn 0.28s ease-out;
+    }
+
+    @keyframes popIn {
+      0% { transform: scale(0.3); opacity: 0; }
+      80% { transform: scale(1.15); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    #overlay-title {
+      font-size: 2.5rem;
+      font-weight: 900;
+      margin-bottom: 10px;
+      color: #ff3333;
+      text-shadow: 0 0 15px rgba(255, 51, 51, 0.6);
+      letter-spacing: 1px;
+    }
+
+    #overlay-title.win {
+      color: #00ff88;
+      text-shadow: 0 0 15px rgba(0, 255, 136, 0.6);
+    }
+
+    #overlay-sub {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="controls-panel">
+    <div class="input-group">
+      <label for="mode-select">Mode: </label>
+      <select id="mode-select">
+        <option value="vs">Player VS Bot</option>
+        <option value="bot_vs_bot">Bot VS Bot</option>
+        <option value="marathon">Zen</option>
+        <option value="sprint">40-Line Sprint</option>
+      </select>
+    </div>
+    <div class="input-group" id="sprint-delay-container">
+      <label for="sprint-delay">Start Delay: </label>
+      <select id="sprint-delay">
+        <option value="3">3 Seconds</option>
+        <option value="2">2 Seconds</option>
+        <option value="1">1 Second</option>
+        <option value="0">Off (0s)</option>
+      </select>
+    </div>
+
+    <!-- Bot 1 Controls (Left) -->
+    <div class="input-group" id="bot1-type-container">
+      <label for="bot1-type" id="bot1-label">Bot Type: </label>
+      <select id="bot1-type">
+        <option value="custom">Custom Genome 1</option>
+        <option value="standard">Standard</option>
+        <option value="aggressive">Aggressive</option>
+        <option value="defensive">Defensive</option>
+        <option value="novice">Novice</option>
+      </select>
+    </div>
+    <div class="input-group" id="custom-genome1-container">
+      <button id="edit-genome1-btn">Edit Genome 1</button>
+    </div>
+
+    <!-- Bot 2 Controls (Right) -->
+    <div class="input-group" id="bot2-type-container">
+      <label for="bot2-type">Bot 2 Type: </label>
+      <select id="bot2-type">
+        <option value="custom">Custom Genome 2</option>
+        <option value="standard">Standard</option>
+        <option value="aggressive">Aggressive</option>
+        <option value="defensive">Defensive</option>
+        <option value="novice">Novice</option>
+      </select>
+    </div>
+    <div class="input-group" id="custom-genome2-container">
+      <button id="edit-genome2-btn">Edit Genome 2</button>
+    </div>
+
+    <div class="input-group" id="bot-speed-container">
+      <label for="bot-speed">Bot Speed: </label>
+      <input type="number" id="bot-speed" value="3.5" min="0.1" max="50" step="0.1"> PPS
+    </div>
+    <div class="input-group" id="bot-depth-container">
+      <label for="bot-depth">Bot Depth: </label>
+      <input type="number" id="bot-depth" value="2" min="1" max="4" step="1">
+    </div>
+    <div class="input-group" id="player-handling-container">
+      <label for="das-input">DAS: </label>
+      <input type="number" id="das-input" value="120" min="0" max="300" step="5"> ms
+      <label for="arr-input" style="margin-left: 6px;">ARR: </label>
+      <input type="number" id="arr-input" value="0" min="0" max="100" step="2"> ms
+      <label for="sdf-slider" style="margin-left: 6px;">SDF: <span id="sdf-val" class="val-display">20x</span></label>
+      <input type="range" id="sdf-slider" min="1" max="41" value="20" step="1">
+    </div>
+
+    <button id="start-btn">Start Game</button>
+    <button id="pause-btn">Pause</button>
+    <button id="restart-btn">Restart (R)</button>
+  </div>
+
+  <div class="game-layout">
+    <div class="board-container">
+      <div class="garbage-meter"><div id="player-garbage-fill" class="garbage-fill"></div></div>
+      <div class="side-panel">
+        <div class="panel-box"><h3>Hold</h3><canvas id="player-hold" width="70" height="70"></canvas></div>
+        <div class="panel-box"><h3>Score</h3><div id="player-score" class="stat-value">0</div></div>
+        <div class="panel-box"><h3>PPS</h3><div id="player-pps" class="stat-value">0.00</div></div>
+        <div class="panel-box"><h3>APM</h3><div id="player-apm" class="stat-value">0.0</div></div>
+        <div class="panel-box"><h3>VS</h3><div id="player-vs" class="stat-value">0.0</div></div>
+      </div>
+      <canvas id="player-canvas" class="canvas-board" width="240" height="480"></canvas>
+      <div class="side-panel">
+        <div class="panel-box"><h3>Next</h3><canvas id="player-next" width="70" height="280"></canvas></div>
+        <div class="panel-box"><h3>Combo</h3><div id="player-combo" class="stat-value">0</div></div>
+        <div class="panel-box">
+          <h3>B2B / Surge</h3>
+          <div id="player-b2b" class="stat-value">None</div>
+          <div class="surge-meter-container"><div id="player-surge-fill" class="surge-meter-fill"></div></div>
+        </div>
+        <div class="panel-box"><h3>Action</h3><div id="player-action" class="action-feed">-</div></div>
+        <div class="panel-box" id="sprint-timer-box"><h3>Time</h3><div id="sprint-timer" class="stat-value">0.000</div></div>
+      </div>
+
+      <!-- Countdown Overlay -->
+      <div id="countdown-overlay" class="hidden">
+        <div id="countdown-text">3</div>
+      </div>
+    </div>
+
+    <div class="board-container" id="bot-container">
+      <div class="garbage-meter"><div id="bot-garbage-fill" class="garbage-fill"></div></div>
+      <div class="side-panel">
+        <div class="panel-box"><h3>Hold</h3><canvas id="bot-hold" width="70" height="70"></canvas></div>
+        <div class="panel-box"><h3>Score</h3><div id="bot-score" class="stat-value">0</div></div>
+        <div class="panel-box"><h3>PPS</h3><div id="bot-pps" class="stat-value">0.00</div></div>
+        <div class="panel-box"><h3>APM</h3><div id="bot-apm" class="stat-value">0.0</div></div>
+        <div class="panel-box"><h3>VS</h3><div id="bot-vs" class="stat-value">0.0</div></div>
+      </div>
+      <canvas id="bot-canvas" class="canvas-board" width="240" height="480"></canvas>
+      <div class="side-panel">
+        <div class="panel-box"><h3>Next</h3><canvas id="bot-next" width="70" height="280"></canvas></div>
+        <div class="panel-box"><h3>Combo</h3><div id="bot-combo" class="stat-value">0</div></div>
+        <div class="panel-box">
+          <h3>B2B / Surge</h3>
+          <div id="bot-b2b" class="stat-value">None</div>
+          <div class="surge-meter-container"><div id="bot-surge-fill" class="surge-meter-fill"></div></div>
+        </div>
+        <div class="panel-box"><h3>Action</h3><div id="bot-action" class="action-feed">-</div></div>
+      </div>
+    </div>
+
+    <div id="game-over-overlay" class="hidden">
+      <div id="overlay-title">GAME OVER</div>
+      <div id="overlay-sub"></div>
+      <button id="overlay-restart-btn" style="padding: 10px 24px; font-size: 1.05rem;">Play Again</button>
+    </div>
+
+    <!-- Genome Editor Modal -->
+    <div id="genome-modal" class="hidden">
+      <h2 id="modal-title" style="margin-bottom: 10px; color: var(--accent-color);">BOT GENOME JSON</h2>
+      <textarea id="genome-json-input"></textarea>
+      <div style="display: flex; gap: 10px;">
+        <button id="save-genome-btn">Save & Apply</button>
+        <button id="reset-genome-btn">Reset to Default</button>
+        <button id="close-genome-btn" style="background: #3b4254;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DEFAULT_GENOME_1 = {
+      "tetrisReward": 431726,
+      "lineReward": 30164,
+      "holesPenalty": 249747,
+      "heightPenalty": 9375,
+      "bumpinessPenalty": 376,
+      "stackFlatnessReward": 24578,
+      "dependencyPenalty": 60589,
+      "dangerHeightPenalty": 251546,
+      "downstackReward": 43392,
+      "comfortableStackHeight": 5,
+      "comfortableHeightPenalty": 15168,
+      "comfortableStackReward": 102476
+    };
+
+    const DEFAULT_GENOME_2 = {
+      "tetrisReward": 500000,
+      "lineReward": 15000,
+      "holesPenalty": 350000,
+      "heightPenalty": 12000,
+      "bumpinessPenalty": 800,
+      "stackFlatnessReward": 15000,
+      "dependencyPenalty": 80000,
+      "dangerHeightPenalty": 300000,
+      "downstackReward": 60000,
+      "comfortableStackHeight": 4,
+      "comfortableHeightPenalty": 20000,
+      "comfortableStackReward": 80000
+    };
+
+    let editingGenomeSlot = 1;
+
+    function getActiveGenome(slot = 1) {
+      const key = `tetris_bot_genome_${slot}`;
+      const saved = localStorage.getItem(key) || localStorage.getItem('tetris_bot_genome');
+      const defaultG = slot === 1 ? DEFAULT_GENOME_1 : DEFAULT_GENOME_2;
+      if (!saved) return { ...defaultG };
+      try {
+        return { ...defaultG, ...JSON.parse(saved) };
+      } catch {
+        return { ...defaultG };
+      }
+    }
+
+    function saveGenome(slot, genome) {
+      localStorage.setItem(`tetris_bot_genome_${slot}`, JSON.stringify(genome, null, 2));
+    }
+
+    function resetGenomeToDefault(slot) {
+      localStorage.removeItem(`tetris_bot_genome_${slot}`);
+    }
+
+    const COLS = 10;
+    const ROWS = 20;
+    const BLOCK_SIZE = 24;
+
+    const PIECE_IDS = { I: 1, J: 2, L: 3, O: 4, S: 5, T: 6, Z: 7, G: 8 };
+
+    const SHAPES = {
+      I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
+      J: [[1,0,0],[1,1,1],[0,0,0]],
+      L: [[0,0,1],[1,1,1],[0,0,0]],
+      O: [[1,1],[1,1]],
+      S: [[0,1,1],[1,1,0],[0,0,0]],
+      T: [[0,1,0],[1,1,1],[0,0,0]],
+      Z: [[1,1,0],[0,1,1],[0,0,0]]
+    };
+
+    const COLORS = {
+      I: '#00f0f0', J: '#0000f0', L: '#f0a000', O: '#f0f000',
+      S: '#00f000', T: '#a000f0', Z: '#f00000', G: '#7b8591'
+    };
+
+    const KICKS_JLSTZ = {
+      '0->1': [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
+      '1->0': [[0,0], [1,0], [1,-1], [0,2], [1,2]],
+      '1->2': [[0,0], [1,0], [1,-1], [0,2], [1,2]],
+      '2->1': [[0,0], [-1,0], [-1,1], [0,-2], [-1,-2]],
+      '2->3': [[0,0], [1,0], [1,1], [0,-2], [1,-2]],
+      '3->2': [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]],
+      '3->0': [[0,0], [-1,0], [-1,-1], [0,2], [-1,2]],
+      '0->3': [[0,0], [1,0], [1,1], [0,-2], [1,-2]]
+    };
+
+    const KICKS_I = {
+      '0->1': [[0,0], [-2,0], [1,0], [-2,-1], [1,2]],
+      '1->0': [[0,0], [2,0], [-1,0], [2,1], [-1,-2]],
+      '1->2': [[0,0], [-1,0], [2,0], [-1,2], [2,-1]],
+      '2->1': [[0,0], [1,0], [-2,0], [1,-2], [-2,1]],
+      '2->3': [[0,0], [2,0], [-1,0], [2,1], [-1,-2]],
+      '3->2': [[0,0], [-2,0], [1,0], [-2,-1], [1,2]],
+      '3->0': [[0,0], [1,0], [-2,0], [1,-2], [-2,1]],
+      '0->3': [[0,0], [-1,0], [2,0], [-1,2], [2,-1]]
+    };
+
+    const ROTATED_SHAPES = {};
+    function computeRotations() {
+      for (let type in SHAPES) {
+        ROTATED_SHAPES[type] = [];
+        let cur = SHAPES[type].map(row => [...row]);
+        for (let rot = 0; rot < 4; rot++) {
+          ROTATED_SHAPES[type].push(cur);
+          const N = cur.length;
+          const res = Array.from({ length: N }, () => Array(N).fill(0));
+          for (let y = 0; y < N; y++) {
+            for (let x = 0; x < N; x++) {
+              res[x][N - 1 - y] = cur[y][x];
+            }
+          }
+          cur = res;
+        }
+      }
+    }
+    computeRotations();
+
+    const modeSelect = document.getElementById('mode-select');
+    const sprintDelaySelect = document.getElementById('sprint-delay');
+    const bot1TypeSelect = document.getElementById('bot1-type');
+    const bot2TypeSelect = document.getElementById('bot2-type');
+    const bot1Label = document.getElementById('bot1-label');
+    const bot1TypeContainer = document.getElementById('bot1-type-container');
+    const bot2TypeContainer = document.getElementById('bot2-type-container');
+    const customGenome1Container = document.getElementById('custom-genome1-container');
+    const customGenome2Container = document.getElementById('custom-genome2-container');
+    const editGenome1Btn = document.getElementById('edit-genome1-btn');
+    const editGenome2Btn = document.getElementById('edit-genome2-btn');
+    const botSpeedInput = document.getElementById('bot-speed');
+    const botDepthInput = document.getElementById('bot-depth');
+    const dasInput = document.getElementById('das-input');
+    const arrInput = document.getElementById('arr-input');
+    const sdfSlider = document.getElementById('sdf-slider');
+    const sdfValDisplay = document.getElementById('sdf-val');
+    const playerHandlingContainer = document.getElementById('player-handling-container');
+    const genomeModal = document.getElementById('genome-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const genomeJsonInput = document.getElementById('genome-json-input');
+    const saveGenomeBtn = document.getElementById('save-genome-btn');
+    const resetGenomeBtn = document.getElementById('reset-genome-btn');
+    const closeGenomeBtn = document.getElementById('close-genome-btn');
+    const botSpeedContainer = document.getElementById('bot-speed-container');
+    const botDepthContainer = document.getElementById('bot-depth-container');
+    const botContainer = document.getElementById('bot-container');
+    const sprintTimerBox = document.getElementById('sprint-timer-box');
+    const sprintTimerEl = document.getElementById('sprint-timer');
+    const linesLabelHeader = document.getElementById('lines-label-header');
+    const startBtn = document.getElementById('start-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const overlayRestartBtn = document.getElementById('overlay-restart-btn');
+    const overlay = document.getElementById('game-over-overlay');
+    const countdownOverlay = document.getElementById('countdown-overlay');
+    const countdownText = document.getElementById('countdown-text');
+
+    let cachedSettings = {
+      das: 120,
+      arr: 0,
+      sdf: 20,
+      bot1Type: 'custom',
+      bot2Type: 'custom',
+      botSpeed: 3.5,
+      botDepth: 2,
+      mode: 'vs',
+      sprintDelay: 3
+    };
+
+    function updateCachedSettings() {
+      cachedSettings.das = parseInt(dasInput.value) || 120;
+      cachedSettings.arr = parseInt(arrInput.value) || 0;
+      cachedSettings.sdf = parseInt(sdfSlider.value) || 20;
+      cachedSettings.bot1Type = bot1TypeSelect.value || 'custom';
+      cachedSettings.bot2Type = bot2TypeSelect.value || 'custom';
+      cachedSettings.botSpeed = parseFloat(botSpeedInput.value) || 3.5;
+      cachedSettings.botDepth = parseInt(botDepthInput.value) || 2;
+      cachedSettings.mode = modeSelect.value;
+      cachedSettings.sprintDelay = parseInt(sprintDelaySelect.value) || 0;
+    }
+
+    let gameStarted = false;
+    let gameOver = false;
+    let isPaused = false;
+    let baseGravity = 1000;
+
+    let player = null;
+    let bot = null;
+
+    let matchStartTime = 0;
+    let isCountingDown = false;
+    let countdownTimer = null;
+    let sprintTimerActive = false;
+    let sprintStartTime = 0;
+    let sprintElapsedTime = 0;
+
+    const keyState = {
+      left: { pressed: false, dasTimer: 0, arrTimer: 0 },
+      right: { pressed: false, dasTimer: 0, arrTimer: 0 },
+      softDrop: { pressed: false, timer: 0 }
+    };
+
+    class TetrisEngine {
+      constructor(canvasId, holdCanvasId, nextCanvasId, garbageFillId, isBot = false) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d', { alpha: false });
+        this.holdCanvas = document.getElementById(holdCanvasId);
+        this.holdCtx = this.holdCanvas.getContext('2d');
+        this.nextCanvas = document.getElementById(nextCanvasId);
+        this.nextCtx = this.nextCanvas.getContext('2d');
+        this.garbageFill = document.getElementById(garbageFillId);
+        this.isBot = isBot;
+        this.reset(true);
+      }
+
+      reset(initial = false) {
+        this.grid = Array.from({ length: ROWS }, () => Array(COLS).fill(0));
+        this.score = 0;
+        this.linesCleared = 0;
+        this.level = 1;
+        this.combo = -1;
+        this.b2bActive = false;
+        this.b2bCount = 0;
+        this.surgeCharge = 0;
+        this.piecesPlaced = 0;
+        this.lastActionWasRotate = false;
+        this.lastActionText = "-";
+        this.holdPieceType = null;
+        this.canHold = true;
+        this.nextQueue = [];
+        this.currentPiece = null;
+        this.garbagePending = 0;
+        this.lockTimer = null;
+        this.botTimer = 0;
+        this.gravityAccumulator = 0;
+
+        // Statistics tracking
+        this.totalAttackSent = 0;
+        this.totalGarbageCanceled = 0;
+        this.totalGarbageCleared = 0;
+
+        this.fillBag();
+        if (!initial) {
+          this.spawnPiece();
+        } else {
+          const type = this.nextQueue.shift();
+          this.currentPiece = {
+            type: type,
+            matrix: ROTATED_SHAPES[type][0],
+            color: COLORS[type],
+            x: Math.floor((COLS - SHAPES[type][0].length) / 2),
+            y: 0,
+            rotation: 0
+          };
+        }
+        this.updateGarbageUI();
+        this.updateHoldUI();
+        this.updateNextUI();
+        this.updateStats(0.001);
+      }
+
+      fillBag() {
+        const pieces = ['I', 'J', 'L', 'O', 'S', 'T', 'Z'];
+        for (let i = pieces.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [pieces[i], pieces[j]] = [pieces[j], pieces[i]];
+        }
+        this.nextQueue.push(...pieces);
+      }
+
+      spawnPiece() {
+        while (this.nextQueue.length < 10) this.fillBag();
+        const type = this.nextQueue.shift();
+        this.currentPiece = {
+          type: type,
+          matrix: ROTATED_SHAPES[type][0],
+          color: COLORS[type],
+          x: Math.floor((COLS - SHAPES[type][0].length) / 2),
+          y: 0,
+          rotation: 0
+        };
+        this.canHold = true;
+        this.lastActionWasRotate = false;
+        this.resetLockDelay();
+
+        if (this.checkCollision(this.currentPiece.matrix, this.currentPiece.x, this.currentPiece.y)) {
+          handleGameOver(this);
+        }
+        this.updateNextUI();
+      }
+
+      checkCollision(matrix, x, y, customGrid = null) {
+        const targetGrid = customGrid || this.grid;
+        const len = matrix.length;
+        for (let r = 0; r < len; r++) {
+          for (let c = 0; c < len; c++) {
+            if (matrix[r][c]) {
+              const newX = x + c;
+              const newY = y + r;
+              if (newX < 0 || newX >= COLS || newY >= ROWS) return true;
+              if (newY >= 0 && targetGrid[newY][newX]) return true;
+            }
+          }
+        }
+        return false;
+      }
+
+      rotatePiece(dir) {
+        if (!this.currentPiece || gameOver || isCountingDown) return;
+        startTimerIfNeeded();
+        const oldRot = this.currentPiece.rotation;
+        const newRot = (oldRot + dir + 4) % 4;
+        const newMatrix = ROTATED_SHAPES[this.currentPiece.type][newRot];
+
+        const kickTable = this.currentPiece.type === 'I' ? KICKS_I : KICKS_JLSTZ;
+        const kickKey = `${oldRot}->${newRot}`;
+        const kicks = kickTable[kickKey] || [[0, 0]];
+
+        for (let i = 0; i < kicks.length; i++) {
+          const [dx, dy] = kicks[i];
+          const testX = this.currentPiece.x + dx;
+          const testY = this.currentPiece.y - dy;
+
+          if (!this.checkCollision(newMatrix, testX, testY)) {
+            this.currentPiece.matrix = newMatrix;
+            this.currentPiece.x = testX;
+            this.currentPiece.y = testY;
+            this.currentPiece.rotation = newRot;
+            this.lastActionWasRotate = true;
+            this.resetLockDelay();
+            return;
+          }
+        }
+      }
+
+      moveLeft() {
+        if (!this.currentPiece || gameOver || isCountingDown) return false;
+        startTimerIfNeeded();
+        if (!this.checkCollision(this.currentPiece.matrix, this.currentPiece.x - 1, this.currentPiece.y)) {
+          this.currentPiece.x--;
+          this.lastActionWasRotate = false;
+          this.resetLockDelay();
+          return true;
+        }
+        return false;
+      }
+
+      moveRight() {
+        if (!this.currentPiece || gameOver || isCountingDown) return false;
+        startTimerIfNeeded();
+        if (!this.checkCollision(this.currentPiece.matrix, this.currentPiece.x + 1, this.currentPiece.y)) {
+          this.currentPiece.x++;
+          this.lastActionWasRotate = false;
+          this.resetLockDelay();
+          return true;
+        }
+        return false;
+      }
+
+      moveDown() {
+        if (!this.currentPiece || gameOver || isCountingDown) return false;
+        startTimerIfNeeded();
+        if (!this.checkCollision(this.currentPiece.matrix, this.currentPiece.x, this.currentPiece.y + 1)) {
+          this.currentPiece.y++;
+          this.score += 1;
+          this.lastActionWasRotate = false;
+          return true;
+        } else {
+          this.startLockDelay();
+          return false;
+        }
+      }
+
+      hardDrop() {
+        if (gameOver || isCountingDown || !this.currentPiece) return;
+        startTimerIfNeeded();
+        let dropDist = 0;
+        while (!this.checkCollision(this.currentPiece.matrix, this.currentPiece.x, this.currentPiece.y + 1)) {
+          this.currentPiece.y++;
+          dropDist++;
+        }
+        this.score += dropDist * 2;
+        this.lockPiece();
+      }
+
+      holdCurrentPiece() {
+        if (!this.canHold || gameOver || isCountingDown || !this.currentPiece) return;
+        startTimerIfNeeded();
+
+        if (!this.holdPieceType) {
+          this.holdPieceType = this.currentPiece.type;
+          this.spawnPiece();
+        } else {
+          const temp = this.currentPiece.type;
+          this.currentPiece = {
+            type: this.holdPieceType,
+            matrix: ROTATED_SHAPES[this.holdPieceType][0],
+            color: COLORS[this.holdPieceType],
+            x: Math.floor((COLS - SHAPES[this.holdPieceType][0].length) / 2),
+            y: 0,
+            rotation: 0
+          };
+          this.holdPieceType = temp;
+        }
+        this.canHold = false;
+        this.lastActionWasRotate = false;
+        this.resetLockDelay();
+        this.updateHoldUI();
+      }
+
+      startLockDelay() {
+        if (!this.lockTimer && !gameOver) {
+          this.lockTimer = setTimeout(() => {
+            if (this.currentPiece && this.checkCollision(this.currentPiece.matrix, this.currentPiece.x, this.currentPiece.y + 1)) {
+              this.lockPiece();
+            }
+            this.lockTimer = null;
+          }, 500);
+        }
+      }
+
+      resetLockDelay() {
+        if (this.lockTimer) {
+          clearTimeout(this.lockTimer);
+          this.lockTimer = null;
+        }
+      }
+
+      clearLines() {
+        const remainingRows = [];
+        let cleared = 0;
+        let garbageCleared = 0;
+
+        for (let r = 0; r < ROWS; r++) {
+          if (this.grid[r].every(cell => cell !== 0)) {
+            if (this.grid[r].includes(COLORS.G)) {
+              garbageCleared++;
+            }
+            cleared++;
+          } else {
+            remainingRows.push(this.grid[r]);
+          }
+        }
+
+        while (remainingRows.length < ROWS) {
+          remainingRows.unshift(Array(COLS).fill(0));
+        }
+
+        this.grid = remainingRows;
+        this.totalGarbageCleared += garbageCleared;
+        return cleared;
+      }
+
+      receiveGarbage(lines) {
+        if (!lines || lines <= 0) return;
+        lines = Math.min(lines, ROWS);
+        let hole = Math.floor(Math.random() * COLS);
+
+        for (let i = 0; i < lines; i++) {
+          this.grid.shift();
+          const garbageRow = Array(COLS).fill(COLORS.G);
+          garbageRow[hole] = 0;
+          this.grid.push(garbageRow);
+        }
+        this.updateGarbageUI();
+      }
+
+      lockPiece() {
+        this.resetLockDelay();
+        if (!this.currentPiece) return;
+
+        const matrix = this.currentPiece.matrix;
+        const color = this.currentPiece.color;
+        const len = matrix.length;
+        this.piecesPlaced++;
+
+        let isTSpin = false;
+        let isAllSpin = false;
+
+        if (this.lastActionWasRotate) {
+          const cx = this.currentPiece.x;
+          const cy = this.currentPiece.y;
+          const cantMoveLeft = this.checkCollision(matrix, cx - 1, cy);
+          const cantMoveRight = this.checkCollision(matrix, cx + 1, cy);
+          const cantMoveUp = this.checkCollision(matrix, cx, cy - 1);
+          const cantMoveDown = this.checkCollision(matrix, cx, cy + 1);
+
+          if (cantMoveLeft && cantMoveRight && (cantMoveUp || cantMoveDown)) {
+            if (this.currentPiece.type === 'T') {
+              const corners = [[cx, cy], [cx + 2, cy], [cx, cy + 2], [cx + 2, cy + 2]];
+              let occupied = 0;
+              for (const [x, y] of corners) {
+                if (x < 0 || x >= COLS || y >= ROWS) occupied++;
+                else if (y >= 0 && this.grid[y][x]) occupied++;
+              }
+              if (occupied >= 3) isTSpin = true;
+              else isAllSpin = true;
+            } else {
+              isAllSpin = true;
+            }
+          }
+        }
+
+        for (let r = 0; r < len; r++) {
+          for (let c = 0; c < len; c++) {
+            if (matrix[r][c]) {
+              const gy = this.currentPiece.y + r;
+              const gx = this.currentPiece.x + c;
+              if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) {
+                this.grid[gy][gx] = color;
+              }
+            }
+          }
+        }
+
+        const linesCleared = this.clearLines();
+        this.linesCleared += linesCleared;
+
+        if (cachedSettings.mode === 'sprint' && !this.isBot && this.linesCleared >= 40) {
+          sprintTimerActive = false;
+          handleSprintWin(sprintElapsedTime);
+          return;
+        }
+
+        const isPerfectClear = linesCleared > 0 && this.grid.every(row => row.every(cell => cell === 0));
+
+        let baseGarbage = 0;
+        let isDifficult = false;
+        let actionName = "";
+
+        if (isTSpin) {
+          if (linesCleared === 0) { actionName = "T-Spin"; this.score += 400; }
+          else if (linesCleared === 1) { actionName = "T-Spin Single"; baseGarbage = 2; this.score += 800; isDifficult = true; }
+          else if (linesCleared === 2) { actionName = "T-Spin Double"; baseGarbage = 4; this.score += 1200; isDifficult = true; }
+          else if (linesCleared === 3) { actionName = "T-Spin Triple"; baseGarbage = 6; this.score += 1600; isDifficult = true; }
+        } else if (isAllSpin && linesCleared <= 3) {
+          if (linesCleared === 0) { actionName = "All-Spin Mini"; this.score += 100; }
+          else if (linesCleared === 1) { actionName = "All-Spin Single"; baseGarbage = 1; this.score += 200; isDifficult = true; }
+          else if (linesCleared === 2) { actionName = "All-Spin Double"; baseGarbage = 2; this.score += 400; isDifficult = true; }
+          else if (linesCleared === 3) { actionName = "All-Spin Triple"; baseGarbage = 3; this.score += 700; isDifficult = true; }
+        } else {
+          if (linesCleared === 1) { actionName = "Single"; this.score += 100; }
+          else if (linesCleared === 2) { actionName = "Double"; baseGarbage = 1; this.score += 300; }
+          else if (linesCleared === 3) { actionName = "Triple"; baseGarbage = 2; this.score += 500; }
+          else if (linesCleared === 4) { actionName = "Tetris"; baseGarbage = 4; this.score += 800; isDifficult = true; }
+        }
+
+        if (isPerfectClear) {
+          baseGarbage += 20;
+          actionName = actionName ? `PC ${actionName}` : "PERFECT CLEAR";
+          isDifficult = true;
+        }
+
+        let garbageToSend = 0;
+        let surgeUnleashed = 0;
+
+        if (linesCleared > 0) {
+          this.combo++;
+          const comboGarbageTable = [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5];
+          const comboGarbage = this.combo > 0 ? comboGarbageTable[Math.min(this.combo, comboGarbageTable.length - 1)] : 0;
+
+          if (isDifficult) {
+            this.b2bCount++;
+            this.b2bActive = true;
+            this.surgeCharge = this.b2bCount >= 4 ? (this.b2bCount - 3) : 0;
+            if (this.b2bCount > 1) {
+              this.score = Math.floor(this.score * 1.5);
+              actionName = `B2Bx${this.b2bCount} ` + actionName;
+            }
+          } else {
+            if (this.surgeCharge > 0) {
+              surgeUnleashed = this.surgeCharge;
+              actionName = `(+${surgeUnleashed})!`;
+              this.triggerSurgeFX();
+            }
+            this.b2bActive = false;
+            this.b2bCount = 0;
+            this.surgeCharge = 0;
+          }
+
+          garbageToSend = baseGarbage + comboGarbage + (isDifficult && this.b2bCount > 1 ? 1 : 0) + surgeUnleashed;
+          if (actionName) this.lastActionText = actionName;
+        } else {
+          this.combo = -1;
+          if (actionName) this.lastActionText = actionName;
+        }
+
+        this.level = Math.floor(this.linesCleared / 10) + 1;
+
+        if ((cachedSettings.mode === 'vs' || cachedSettings.mode === 'bot_vs_bot') && player && bot) {
+          const opponent = (this === player) ? bot : player;
+          if (this.piecesPlaced <= 7 && this.garbagePending > 0 && garbageToSend > 0) {
+            const cancelMultiplier = 2;
+            const effectiveCancel = garbageToSend * cancelMultiplier;
+
+            if (effectiveCancel >= this.garbagePending) {
+              const overflow = Math.floor((effectiveCancel - this.garbagePending) / cancelMultiplier);
+              this.totalGarbageCanceled += this.garbagePending;
+              this.garbagePending = 0;
+              garbageToSend = overflow;
+            } else {
+              this.garbagePending -= effectiveCancel;
+              this.totalGarbageCanceled += effectiveCancel;
+              garbageToSend = 0;
+            }
+            this.updateGarbageUI();
+          } else if (garbageToSend > 0) {
+            if (this.garbagePending > 0) {
+              if (garbageToSend >= this.garbagePending) {
+                garbageToSend -= this.garbagePending;
+                this.totalGarbageCanceled += this.garbagePending;
+                this.garbagePending = 0;
+              } else {
+                this.garbagePending -= garbageToSend;
+                this.totalGarbageCanceled += garbageToSend;
+                garbageToSend = 0;
+              }
+              this.updateGarbageUI();
+            }
+          }
+
+          if (garbageToSend > 0) {
+            this.totalAttackSent += garbageToSend;
+            opponent.garbagePending += garbageToSend;
+            opponent.updateGarbageUI();
+          } else if (linesCleared === 0 && this.garbagePending > 0) {
+            const linesToReceive = Math.min(8, this.garbagePending);
+            this.receiveGarbage(linesToReceive);
+            this.garbagePending -= linesToReceive;
+            this.updateGarbageUI();
+          }
+        } else if (garbageToSend > 0) {
+          this.totalAttackSent += garbageToSend;
+        }
+
+        this.spawnPiece();
+      }
+
+      triggerSurgeFX() {
+        const boardElem = this.canvas.parentElement;
+        if (boardElem) {
+          boardElem.classList.remove('surge-flash');
+          void boardElem.offsetWidth;
+          boardElem.classList.add('surge-flash');
+        }
+      }
+
+      updateGarbageUI() {
+        if (!this.garbageFill) return;
+        const pct = Math.min(100, (this.garbagePending / ROWS) * 100);
+        this.garbageFill.style.height = `${pct}%`;
+      }
+
+      updateHoldUI() {
+        if (!this.holdCtx) return;
+        this.holdCtx.clearRect(0, 0, this.holdCanvas.width, this.holdCanvas.height);
+        if (this.holdPieceType) {
+          const matrix = SHAPES[this.holdPieceType];
+          this.holdCtx.fillStyle = COLORS[this.holdPieceType];
+          const offset = (4 - matrix.length) / 2;
+          for (let r = 0; r < matrix.length; r++) {
+            for (let c = 0; c < matrix[r].length; c++) {
+              if (matrix[r][c]) {
+                this.holdCtx.fillRect((c + offset) * 16 + 2, (r + offset) * 16 + 2, 15, 15);
+              }
+            }
+          }
+        }
+      }
+
+      updateNextUI() {
+        if (!this.nextCtx) return;
+        this.nextCtx.clearRect(0, 0, this.nextCanvas.width, this.nextCanvas.height);
+        while (this.nextQueue.length < 5) this.fillBag();
+
+        const numPieces = 5;
+        const blockSize = 12;
+
+        for (let i = 0; i < numPieces; i++) {
+          const nextType = this.nextQueue[i];
+          const matrix = SHAPES[nextType];
+          this.nextCtx.fillStyle = COLORS[nextType];
+          const offset = (4 - matrix.length) / 2;
+          const startY = i * 54 + 6;
+
+          for (let r = 0; r < matrix.length; r++) {
+            for (let c = 0; c < matrix[r].length; c++) {
+              if (matrix[r][c]) {
+                this.nextCtx.fillRect(
+                  (c + offset) * blockSize + 11,
+                  startY + (r + offset) * blockSize,
+                  blockSize - 1,
+                  blockSize - 1
+                );
+              }
+            }
+          }
+        }
+      }
+
+      updateStats(elapsedSeconds = 0.001) {
+        const prefix = (this === bot) ? 'bot' : 'player';
+        const scoreEl = document.getElementById(`${prefix}-score`);
+        const comboEl = document.getElementById(`${prefix}-combo`);
+        const b2bEl = document.getElementById(`${prefix}-b2b`);
+        const linesEl = document.getElementById(`${prefix}-lines`);
+        const actionEl = document.getElementById(`${prefix}-action`);
+        const surgeFillEl = document.getElementById(`${prefix}-surge-fill`);
+
+        const ppsEl = document.getElementById(`${prefix}-pps`);
+        const apmEl = document.getElementById(`${prefix}-apm`);
+        const vsEl = document.getElementById(`${prefix}-vs`);
+
+        const safeSecs = Math.max(0.001, elapsedSeconds);
+        const pps = (this.piecesPlaced / safeSecs).toFixed(2);
+        const apm = ((this.totalAttackSent / safeSecs) * 60).toFixed(1);
+        const vs = (((this.totalAttackSent + this.totalGarbageCanceled + this.totalGarbageCleared) / safeSecs) * 60).toFixed(1);
+
+        if (scoreEl) scoreEl.textContent = this.score;
+        if (comboEl) comboEl.textContent = Math.max(0, this.combo);
+        if (ppsEl) ppsEl.textContent = pps;
+        if (apmEl) apmEl.textContent = apm;
+        if (vsEl) vsEl.textContent = vs;
+
+        if (b2bEl) {
+          if (this.b2bCount >= 4) {
+            b2bEl.innerHTML = `<span class="surge-badge">B2Bx${this.b2bCount} ⚡+${this.surgeCharge}</span>`;
+          } else if (this.b2bCount > 0) {
+            b2bEl.textContent = `B2Bx${this.b2bCount}`;
+          } else {
+            b2bEl.textContent = "None";
+          }
+        }
+        if (surgeFillEl) {
+          const surgePct = Math.min(100, (this.surgeCharge / 12) * 100);
+          surgeFillEl.style.width = `${surgePct}%`;
+        }
+
+        if (linesEl) {
+          if (cachedSettings.mode === 'sprint' && !this.isBot) {
+            const remaining = Math.max(0, 40 - this.linesCleared);
+            linesEl.textContent = `${remaining}`;
+          } else {
+            linesEl.textContent = this.linesCleared;
+          }
+        }
+        if (actionEl) actionEl.textContent = this.lastActionText;
+      }
+
+      draw(ctx) {
+        ctx.fillStyle = '#0d0e12';
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Render Background 40-Line Counter in Sprint Mode
+        if (cachedSettings.mode === 'sprint' && !this.isBot) {
+          const linesLeft = Math.max(0, 40 - this.linesCleared);
+          ctx.save();
+          ctx.font = '900 120px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.06)';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(linesLeft.toString(), this.canvas.width / 2, this.canvas.height / 2);
+          ctx.restore();
+        }
+
+        for (let r = 0; r < ROWS; r++) {
+          for (let c = 0; c < COLS; c++) {
+            if (this.grid[r][c]) {
+              ctx.fillStyle = this.grid[r][c];
+              ctx.fillRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+            } else {
+              ctx.strokeStyle = '#181b24';
+              ctx.strokeRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            }
+          }
+        }
+
+        if (this.currentPiece && !gameOver) {
+          let ghostY = this.currentPiece.y;
+          while (!this.checkCollision(this.currentPiece.matrix, this.currentPiece.x, ghostY + 1)) {
+            ghostY++;
+          }
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.18)';
+          const matrix = this.currentPiece.matrix;
+          const len = matrix.length;
+          for (let r = 0; r < len; r++) {
+            for (let c = 0; c < len; c++) {
+              if (matrix[r][c]) {
+                ctx.fillRect((this.currentPiece.x + c) * BLOCK_SIZE, (ghostY + r) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+              }
+            }
+          }
+        }
+
+        if (this.currentPiece) {
+          ctx.fillStyle = this.currentPiece.color;
+          const matrix = this.currentPiece.matrix;
+          const len = matrix.length;
+          for (let r = 0; r < len; r++) {
+            for (let c = 0; c < len; c++) {
+              if (matrix[r][c]) {
+                ctx.fillRect((this.currentPiece.x + c) * BLOCK_SIZE, (this.currentPiece.y + r) * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+              }
+            }
+          }
+        }
+      }
+    }
+
+    function getStandardLandings(botInstance, pieceType, targetGrid = null) {
+      const gridToUse = targetGrid || botInstance.grid;
+      const landings = [];
+      const seenKey = new Set();
+
+      for (let rot = 0; rot < 4; rot++) {
+        const matrix = ROTATED_SHAPES[pieceType][rot];
+        for (let x = -2; x < COLS + 2; x++) {
+          if (botInstance.checkCollision(matrix, x, 0, gridToUse)) continue;
+          let y = 0;
+          while (!botInstance.checkCollision(matrix, x, y + 1, gridToUse)) {
+            y++;
+          }
+          const k = ((x + 5) << 12) | (y << 4) | rot;
+          if (!seenKey.has(k)) {
+            seenKey.add(k);
+            landings.push({ x, y, rot, lastRot: false });
+          }
+        }
+      }
+      return landings;
+    }
+
+    function getReachableLandings(botInstance, pieceType, targetGrid = null) {
+      const gridToUse = targetGrid || botInstance.grid;
+      const landings = [];
+      const visited = new Set();
+
+      const startX = Math.floor((COLS - SHAPES[pieceType][0].length) / 2);
+      const startY = 0;
+      const startRot = 0;
+
+      const startKey = ((startX + 5) << 12) | ((startY + 5) << 4) | startRot;
+      const queue = [{ x: startX, y: startY, rot: startRot, path: [] }];
+      visited.add(startKey);
+
+      let steps = 0;
+
+      while (queue.length > 0 && steps < 3000) {
+        steps++;
+        const state = queue.shift();
+        const matrix = ROTATED_SHAPES[pieceType][state.rot];
+
+        if (botInstance.checkCollision(matrix, state.x, state.y, gridToUse)) continue;
+
+        if (botInstance.checkCollision(matrix, state.x, state.y + 1, gridToUse)) {
+          landings.push({
+            x: state.x,
+            y: state.y,
+            rot: state.rot,
+            lastRot: state.path.length > 0 && state.path[state.path.length - 1].type === 'rotate',
+            path: state.path
+          });
+        }
+
+        function addState(nx, ny, nrot, action) {
+          const key = ((nx + 5) << 12) | ((ny + 5) << 4) | nrot;
+          if (visited.has(key)) return;
+          if (botInstance.checkCollision(ROTATED_SHAPES[pieceType][nrot], nx, ny, gridToUse)) return;
+          visited.add(key);
+          queue.push({ x: nx, y: ny, rot: nrot, path: state.path.concat(action) });
+        }
+
+        if (!botInstance.checkCollision(matrix, state.x - 1, state.y, gridToUse)) addState(state.x - 1, state.y, state.rot, { type: 'left' });
+        if (!botInstance.checkCollision(matrix, state.x + 1, state.y, gridToUse)) addState(state.x + 1, state.y, state.rot, { type: 'right' });
+        if (!botInstance.checkCollision(matrix, state.x, state.y + 1, gridToUse)) addState(state.x, state.y + 1, state.rot, { type: 'down' });
+
+        for (const dir of [1, -1, 2]) {
+          const newRot = (state.rot + dir + 4) % 4;
+          const rotatedMatrix = ROTATED_SHAPES[pieceType][newRot];
+          const kickTable = pieceType === 'I' ? KICKS_I : KICKS_JLSTZ;
+          const kickKey = `${state.rot}->${newRot}`;
+          const kicks = kickTable[kickKey] || [[0, 0]];
+
+          for (const [dx, dy] of kicks) {
+            const testX = state.x + dx;
+            const testY = state.y - dy;
+
+            if (!botInstance.checkCollision(rotatedMatrix, testX, testY, gridToUse)) {
+              let rotationType = dir === 1 ? 'rotateCW' : dir === -1 ? 'rotateCCW' : 'rotate180';
+              addState(testX, testY, newRot, { type: rotationType, dir });
+              break;
+            }
+          }
+        }
+      }
+
+      if (landings.length === 0) {
+        return getStandardLandings(botInstance, pieceType, targetGrid);
+      }
+      return landings;
+    }
+
+    function fastCloneGrid(grid) {
+      const copy = new Array(ROWS);
+      for (let r = 0; r < ROWS; r++) {
+        copy[r] = grid[r].slice();
+      }
+      return copy;
+    }
+
+    function evaluateMove(botInstance, state, pieceType, targetGrid = null, botType = 'custom', genomeSlot = 1) {
+      const grid = targetGrid || botInstance.grid;
+      let tempGrid = fastCloneGrid(grid);
+      let matrix = ROTATED_SHAPES[pieceType][state.rot];
+      const mLen = matrix.length;
+      const pieceVal = COLORS[pieceType];
+
+      for (let r = 0; r < mLen; r++) {
+        for (let c = 0; c < mLen; c++) {
+          if (matrix[r][c]) {
+            const gy = state.y + r;
+            const gx = state.x + c;
+            if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) {
+              tempGrid[gy][gx] = pieceVal;
+            }
+          }
+        }
+      }
+
+      let linesCleared = 0;
+      let garbageLinesCleared = 0;
+      for (let r = ROWS - 1; r >= 0; r--) {
+        if (tempGrid[r].every(cell => cell !== 0)) {
+          if (tempGrid[r].some(cell => cell === COLORS.G)) {
+            garbageLinesCleared++;
+          }
+          tempGrid.splice(r, 1);
+          tempGrid.unshift(Array(COLS).fill(0));
+          linesCleared++;
+          r++;
+        }
+      }
+
+      let colHeights = new Array(COLS).fill(0);
+      let standardHoles = 0;
+      let coveredBlocks = 0;
+
+      for (let c = 0; c < COLS; c++) {
+        let blockFound = false;
+        let blocksAbove = 0;
+        for (let r = 0; r < ROWS; r++) {
+          if (tempGrid[r][c] !== 0) {
+            if (!blockFound) {
+              colHeights[c] = ROWS - r;
+              blockFound = true;
+            }
+            blocksAbove++;
+          } else if (blockFound) {
+            standardHoles++;
+            coveredBlocks += blocksAbove;
+          }
+        }
+      }
+
+      let garbageHeight = 0;
+      for (let c = 0; c < COLS; c++) {
+        for (let r = 0; r < ROWS; r++) {
+          if (tempGrid[r][c] === COLORS.G) {
+            const h = ROWS - r;
+            if (h > garbageHeight) garbageHeight = h;
+          }
+        }
+      }
+
+      let dependencies = 0;
+      for (let c = 1; c < COLS-1; c++) {
+        let leftH = (c > 0) ? colHeights[c - 1] : 20;
+        let rightH = (c < COLS - 1) ? colHeights[c + 1] : 20;
+        let minNeighbor = Math.min(leftH, rightH);
+        let depth = minNeighbor - colHeights[c];
+        if (depth >= 2) {
+          dependencies += (depth >= 3) ? 2 : 1;
+        }
+      }
+
+      let stackCols = colHeights.slice(1);
+      let stackMaxHeight = Math.max(...stackCols);
+      let stackMinHeight = Math.min(...stackCols);
+      let aggregateHeight = colHeights.reduce((a, b) => a + b, 0);
+      let totalMaxHeight = Math.max(...colHeights);
+
+      let bumpiness = 0;
+      for (let c = 0; c < COLS - 1; c++) {
+        bumpiness += Math.abs(colHeights[c] - colHeights[c + 1]);
+      }
+
+      let effectiveHeight = totalMaxHeight + (botInstance.garbagePending || 0);
+      let isInDanger = effectiveHeight >= 14;
+
+      let score = 0;
+
+      if (botType === 'custom') {
+        const genome = getActiveGenome(genomeSlot);
+
+        if (linesCleared === 4) {
+          score += genome.tetrisReward;
+        } else if (linesCleared > 0) {
+          score += linesCleared * genome.lineReward;
+        }
+
+        if (totalMaxHeight <= genome.comfortableStackHeight) {
+          score += genome.comfortableStackReward;
+        } else {
+          const heightExcess = totalMaxHeight - genome.comfortableStackHeight;
+          score -= heightExcess * genome.comfortableHeightPenalty;
+        }
+
+        if (totalMaxHeight > 15) {
+          score -= (totalMaxHeight - 15) * genome.dangerHeightPenalty;
+        }
+
+        score -= standardHoles * genome.holesPenalty;
+        score -= aggregateHeight * genome.heightPenalty;
+        score -= bumpiness * genome.bumpinessPenalty;
+        score -= dependencies * genome.dependencyPenalty;
+
+        let stackFlatness = Math.max(0, 20 - bumpiness);
+        score += stackFlatness * genome.stackFlatnessReward;
+
+        if (garbageLinesCleared > 0) {
+          score += genome.downstackReward;
+        }
+
+      } else if (botType === 'aggressive') {
+        let stackHeightDiff = stackMaxHeight - stackMinHeight;
+        if (isInDanger) {
+          score += linesCleared * 90000;
+          score += garbageLinesCleared * 70000;
+          score -= effectiveHeight * 18000;
+          score -= standardHoles * 400000;
+        } else {
+          if (linesCleared === 4) {
+            score += 350000 + (botInstance.b2bCount >= 1 ? 120000 : 0);
+          } else if (linesCleared > 0) {
+            score -= linesCleared * 80000;
+          }
+        }
+        if (stackHeightDiff <= 2) score += 45000;
+        score -= dependencies * 20000;
+        score -= standardHoles * 300000;
+        score -= (stackMaxHeight - stackMinHeight) * 10000;
+
+      } else if (botType === 'defensive') {
+        let stackHeightDiff = stackMaxHeight - stackMinHeight;
+        if (isInDanger || totalMaxHeight > 8) {
+          score += linesCleared * 120000;
+          score += garbageLinesCleared * 150000;
+          score -= effectiveHeight * 40000;
+          score -= standardHoles * 800000;
+        } else {
+          score += linesCleared * 70000;
+          score += garbageLinesCleared * 100000;
+          score -= aggregateHeight * 150;
+          score -= standardHoles * 500000;
+        }
+        if (stackHeightDiff <= 2) score += 45000;
+        score -= dependencies * 60000;
+        score -= (stackMaxHeight - stackMinHeight) * 30000;
+
+      } else if (botType === 'novice') {
+        let stackHeightDiff = stackMaxHeight - stackMinHeight;
+        if (isInDanger) {
+          score += linesCleared * 80000;
+          score -= effectiveHeight * 25000;
+          score -= standardHoles * 500000;
+        } else {
+          if (linesCleared === 4) score += 220000;
+          else if (linesCleared > 0) score += linesCleared * 20000;
+        }
+        score -= standardHoles * 200000;
+        score -= (stackMaxHeight - stackMinHeight) * 10000;
+        score += (Math.random() - 0.5) * 180000;
+
+      } else {
+        if (isInDanger) {
+          score += linesCleared * 80000;
+          score += garbageLinesCleared * 60000;
+          score -= effectiveHeight * 25000;
+          score -= standardHoles * 500000;
+        } else {
+          if (linesCleared === 4) {
+            score += 220000 + (botInstance.b2bCount >= 3 ? 50000 : 0);
+          } else if (linesCleared > 0) {
+            if (botInstance.surgeCharge > 10) score += 180000;
+            else if (stackMaxHeight < 14) score -= linesCleared * 45000;
+            else score += linesCleared * 50000;
+          }
+        }
+
+        score -= dependencies * 40000;
+        score -= garbageHeight * 2000;
+        let stackHeightDiff = stackMaxHeight - stackMinHeight;
+        score -= stackHeightDiff * 20000;
+        if (stackHeightDiff <= 2) score += 45000;
+        score -= bumpiness * 400;
+
+        if (!isInDanger) {
+          score -= standardHoles * 350000;
+          score -= coveredBlocks * 500;
+          score -= aggregateHeight * 20;
+          if (botInstance.garbagePending > 0) score += garbageLinesCleared * 30000;
+        }
+
+        if (isInDanger){
+          score -= botInstance.garbagePending * 3000;
+          score -= (stackMaxHeight) * 12000;
+        }
+      }
+
+      return { score, grid: tempGrid };
+    }
+
+    function getBestBotMove(botInstance, botType = 'custom', genomeSlot = 1) {
+      if (!botInstance || !botInstance.currentPiece) return null;
+      const maxDepth = Math.max(1, cachedSettings.botDepth);
+
+      function searchDepth(grid, queueIdx, currentDepth, canHold, currentHold, currentPiece) {
+        let candidates = [{ type: currentPiece, hold: false }];
+        if (canHold) {
+          let hType = currentHold;
+          if (!hType && queueIdx < botInstance.nextQueue.length) {
+            hType = botInstance.nextQueue[queueIdx];
+          }
+          if (hType && hType !== currentPiece) {
+            candidates.push({ type: hType, hold: true });
+          }
+        }
+
+        let evaluatedMoves = [];
+
+        for (let pObj of candidates) {
+          let landings = getReachableLandings(botInstance, pObj.type, grid);
+          for (let state of landings) {
+            let evalRes = evaluateMove(botInstance, state, pObj.type, grid, botType, genomeSlot);
+            let score = pObj.hold ? evalRes.score - 50 : evalRes.score;
+
+            evaluatedMoves.push({
+              score: score,
+              move: {
+                x: state.x,
+                y: state.y,
+                rot: state.rot,
+                hold: pObj.hold,
+                type: pObj.type,
+                lastRot: state.lastRot,
+                path: state.path || []
+              },
+              gridAfter: evalRes.grid,
+              usedHold: pObj.hold
+            });
+          }
+        }
+
+        if (evaluatedMoves.length === 0) return null;
+        evaluatedMoves.sort((a, b) => b.score - a.score);
+
+        if (currentDepth >= maxDepth) {
+          return currentDepth === 1 ? evaluatedMoves[0].move : evaluatedMoves[0].score;
+        }
+
+        let beamWidth = currentDepth === 1 ? 5 : 3;
+        let topBeam = evaluatedMoves.slice(0, beamWidth);
+
+        if (currentDepth === 1) {
+          let bestScore = -Infinity;
+          let bestMove = topBeam[0].move;
+
+          for (let candidate of topBeam) {
+            let nextQueueIdx = queueIdx;
+            let nextHold = currentHold;
+
+            if (candidate.usedHold) {
+              nextHold = currentPiece;
+              nextQueueIdx = !currentHold ? queueIdx + 1 : queueIdx;
+            } else {
+              nextHold = currentHold;
+              nextQueueIdx = queueIdx + 1;
+            }
+
+            let nextPiece = (nextQueueIdx < botInstance.nextQueue.length) ? botInstance.nextQueue[nextQueueIdx] : null;
+            let subScore = 0;
+            if (nextPiece) {
+              subScore = searchDepth(
+                candidate.gridAfter,
+                nextQueueIdx,
+                currentDepth + 1,
+                true,
+                nextHold,
+                nextPiece
+              );
+            }
+
+            let totalScore = candidate.score + (0.75 * (subScore || 0));
+            if (totalScore > bestScore) {
+              bestScore = totalScore;
+              bestMove = candidate.move;
+            }
+          }
+          return bestMove;
+        } else {
+          let bestSubScore = -Infinity;
+          for (let candidate of topBeam) {
+            let nextQueueIdx = queueIdx;
+            let nextHold = currentHold;
+
+            if (candidate.usedHold) {
+              nextHold = currentPiece;
+              nextQueueIdx = !currentHold ? queueIdx + 1 : queueIdx;
+            } else {
+              nextHold = currentHold;
+              nextQueueIdx = queueIdx + 1;
+            }
+
+            let nextPiece = (nextQueueIdx < botInstance.nextQueue.length) ? botInstance.nextQueue[nextQueueIdx] : null;
+            let subScore = candidate.score;
+            if (nextPiece && currentDepth < maxDepth) {
+              let deeperScore = searchDepth(
+                candidate.gridAfter,
+                nextQueueIdx,
+                currentDepth + 1,
+                true,
+                nextHold,
+                nextPiece
+              );
+              subScore += 0.75 * (deeperScore || 0);
+            }
+            if (subScore > bestSubScore) {
+              bestSubScore = subScore;
+            }
+          }
+          return bestSubScore;
+        }
+      }
+
+      return searchDepth(
+        botInstance.grid,
+        0,
+        1,
+        botInstance.canHold,
+        botInstance.holdPieceType,
+        botInstance.currentPiece.type
+      );
+    }
+
+    function processBotTurn(targetBot, time, botType = 'custom', genomeSlot = 1) {
+      if (
+        !targetBot ||
+        gameOver ||
+        !gameStarted ||
+        isPaused ||
+        isCountingDown ||
+        !targetBot.currentPiece
+      ) {
+        return;
+      }
+
+      const pps = cachedSettings.botSpeed;
+      const botDelay = 1000 / Math.max(0.1, pps);
+
+      if (time - targetBot.botTimer < botDelay) return;
+      targetBot.botTimer = time;
+
+      try {
+        const move = getBestBotMove(targetBot, botType, genomeSlot);
+
+        if (!move) {
+          targetBot.hardDrop();
+          return;
+        }
+
+        if (move.hold && targetBot.canHold) {
+          targetBot.holdCurrentPiece();
+        }
+
+        if (!targetBot.currentPiece) return;
+
+        if (move.path && move.path.length > 0) {
+          for (const action of move.path) {
+            if (!targetBot.currentPiece) break;
+            if (action.type === 'left') targetBot.moveLeft();
+            else if (action.type === 'right') targetBot.moveRight();
+            else if (action.type === 'down') targetBot.moveDown();
+            else if (action.type === 'rotateCW') targetBot.rotatePiece(1);
+            else if (action.type === 'rotateCCW') targetBot.rotatePiece(-1);
+            else if (action.type === 'rotate180') targetBot.rotatePiece(2);
+          }
+        } else {
+          const targetRotation = move.rot;
+          const targetX = move.x;
+
+          let rotationSteps = (targetRotation - targetBot.currentPiece.rotation + 4) % 4;
+          if (rotationSteps === 3) rotationSteps = -1;
+
+          if (rotationSteps > 0) {
+            for (let i = 0; i < rotationSteps; i++) targetBot.rotatePiece(1);
+          } else if (rotationSteps < 0) {
+            for (let i = 0; i < Math.abs(rotationSteps); i++) targetBot.rotatePiece(-1);
+          }
+
+          let safety = 0;
+          while (targetBot.currentPiece.x < targetX && safety++ < COLS + 2) {
+            if (!targetBot.moveRight()) break;
+          }
+
+          safety = 0;
+          while (targetBot.currentPiece.x > targetX && safety++ < COLS + 2) {
+            if (!targetBot.moveLeft()) break;
+          }
+        }
+
+        targetBot.hardDrop();
+
+      } catch (err) {
+        console.error("Bot execution error:", err);
+        if (targetBot.currentPiece) {
+          targetBot.lastActionWasRotate = false;
+          targetBot.hardDrop();
+        }
+      }
+    }
+
+    const STORAGE_KEYS = {
+      mode: 'tetris_vs_mode',
+      sprintDelay: 'tetris_vs_sprintdelay',
+      bot1Type: 'tetris_vs_bot1type',
+      bot2Type: 'tetris_vs_bot2type',
+      botSpeed: 'tetris_vs_botspeed',
+      botDepth: 'tetris_vs_botdepth',
+      das: 'tetris_vs_das',
+      arr: 'tetris_vs_arr',
+      sdf: 'tetris_vs_sdf'
+    };
+
+    function saveSettingsToStorage() {
+      try {
+        localStorage.setItem(STORAGE_KEYS.mode, modeSelect.value);
+        localStorage.setItem(STORAGE_KEYS.sprintDelay, sprintDelaySelect.value);
+        localStorage.setItem(STORAGE_KEYS.bot1Type, bot1TypeSelect.value);
+        localStorage.setItem(STORAGE_KEYS.bot2Type, bot2TypeSelect.value);
+        localStorage.setItem(STORAGE_KEYS.botSpeed, botSpeedInput.value);
+        localStorage.setItem(STORAGE_KEYS.botDepth, botDepthInput.value);
+        localStorage.setItem(STORAGE_KEYS.das, dasInput.value);
+        localStorage.setItem(STORAGE_KEYS.arr, arrInput.value);
+        localStorage.setItem(STORAGE_KEYS.sdf, sdfSlider.value);
+      } catch (e) {
+        console.warn("Unable to save settings:", e);
+      }
+    }
+
+    function loadSettingsFromStorage() {
+      try {
+        if (localStorage.getItem(STORAGE_KEYS.mode) !== null) modeSelect.value = localStorage.getItem(STORAGE_KEYS.mode);
+        if (localStorage.getItem(STORAGE_KEYS.sprintDelay) !== null) sprintDelaySelect.value = localStorage.getItem(STORAGE_KEYS.sprintDelay);
+        if (localStorage.getItem(STORAGE_KEYS.bot1Type) !== null) bot1TypeSelect.value = localStorage.getItem(STORAGE_KEYS.bot1Type);
+        if (localStorage.getItem(STORAGE_KEYS.bot2Type) !== null) bot2TypeSelect.value = localStorage.getItem(STORAGE_KEYS.bot2Type);
+        if (localStorage.getItem(STORAGE_KEYS.botSpeed) !== null) botSpeedInput.value = localStorage.getItem(STORAGE_KEYS.botSpeed);
+        if (localStorage.getItem(STORAGE_KEYS.botDepth) !== null) botDepthInput.value = localStorage.getItem(STORAGE_KEYS.botDepth);
+        if (localStorage.getItem(STORAGE_KEYS.das) !== null) dasInput.value = localStorage.getItem(STORAGE_KEYS.das);
+        if (localStorage.getItem(STORAGE_KEYS.arr) !== null) arrInput.value = localStorage.getItem(STORAGE_KEYS.arr);
+        if (localStorage.getItem(STORAGE_KEYS.sdf) !== null) sdfSlider.value = localStorage.getItem(STORAGE_KEYS.sdf);
+      } catch (e) {
+        console.warn("Unable to load settings:", e);
+      }
+    }
+
+    function updateSDFLabel() {
+      const val = parseInt(sdfSlider.value);
+      sdfValDisplay.textContent = val >= 41 ? '∞' : `${val}x`;
+    }
+
+    function updateModeVisibility() {
+      const mode = modeSelect.value;
+
+      if (mode === 'vs') {
+        botContainer.classList.remove('hidden');
+        bot1TypeContainer.classList.remove('hidden');
+        bot1Label.textContent = "Bot Type: ";
+        bot2TypeContainer.classList.add('hidden');
+        customGenome2Container.classList.add('hidden');
+        botSpeedContainer.classList.remove('hidden');
+        botDepthContainer.classList.remove('hidden');
+        playerHandlingContainer.classList.remove('hidden');
+        sprintTimerBox.classList.add('hidden');
+        if (linesLabelHeader) linesLabelHeader.textContent = "Lines";
+        if (bot1TypeSelect.value === 'custom') {
+          customGenome1Container.classList.remove('hidden');
+        } else {
+          customGenome1Container.classList.add('hidden');
+        }
+      } else if (mode === 'bot_vs_bot') {
+        botContainer.classList.remove('hidden');
+        bot1TypeContainer.classList.remove('hidden');
+        bot1Label.textContent = "Bot 1 Type: ";
+        bot2TypeContainer.classList.remove('hidden');
+        botSpeedContainer.classList.remove('hidden');
+        botDepthContainer.classList.remove('hidden');
+        playerHandlingContainer.classList.add('hidden');
+        sprintTimerBox.classList.add('hidden');
+        if (linesLabelHeader) linesLabelHeader.textContent = "Lines";
+
+        if (bot1TypeSelect.value === 'custom') customGenome1Container.classList.remove('hidden');
+        else customGenome1Container.classList.add('hidden');
+
+        if (bot2TypeSelect.value === 'custom') customGenome2Container.classList.remove('hidden');
+        else customGenome2Container.classList.add('hidden');
+
+      } else if (mode === 'sprint') {
+        botContainer.classList.add('hidden');
+        bot1TypeContainer.classList.add('hidden');
+        bot2TypeContainer.classList.add('hidden');
+        customGenome1Container.classList.add('hidden');
+        customGenome2Container.classList.add('hidden');
+        botSpeedContainer.classList.add('hidden');
+        botDepthContainer.classList.add('hidden');
+        playerHandlingContainer.classList.remove('hidden');
+        sprintTimerBox.classList.remove('hidden');
+        if (linesLabelHeader) linesLabelHeader.textContent = "Left";
+      } else {
+        botContainer.classList.add('hidden');
+        bot1TypeContainer.classList.add('hidden');
+        bot2TypeContainer.classList.add('hidden');
+        customGenome1Container.classList.add('hidden');
+        customGenome2Container.classList.add('hidden');
+        botSpeedContainer.classList.add('hidden');
+        botDepthContainer.classList.add('hidden');
+        playerHandlingContainer.classList.remove('hidden');
+        sprintTimerBox.classList.add('hidden');
+        if (linesLabelHeader) linesLabelHeader.textContent = "Lines";
+      }
+    }
+
+    editGenome1Btn.addEventListener('click', () => {
+      editingGenomeSlot = 1;
+      modalTitle.textContent = "BOT 1 GENOME JSON";
+      genomeJsonInput.value = JSON.stringify(getActiveGenome(1), null, 2);
+      genomeModal.classList.remove('hidden');
+    });
+
+    editGenome2Btn.addEventListener('click', () => {
+      editingGenomeSlot = 2;
+      modalTitle.textContent = "BOT 2 GENOME JSON";
+      genomeJsonInput.value = JSON.stringify(getActiveGenome(2), null, 2);
+      genomeModal.classList.remove('hidden');
+    });
+
+    closeGenomeBtn.addEventListener('click', () => {
+      genomeModal.classList.add('hidden');
+    });
+
+    saveGenomeBtn.addEventListener('click', () => {
+      try {
+        const parsed = JSON.parse(genomeJsonInput.value);
+        saveGenome(editingGenomeSlot, parsed);
+        genomeModal.classList.add('hidden');
+      } catch (e) {
+        alert('Invalid JSON format! Please check your syntax.');
+      }
+    });
+
+    resetGenomeBtn.addEventListener('click', () => {
+      resetGenomeToDefault(editingGenomeSlot);
+      const defaultG = editingGenomeSlot === 1 ? DEFAULT_GENOME_1 : DEFAULT_GENOME_2;
+      genomeJsonInput.value = JSON.stringify(defaultG, null, 2);
+    });
+
+    [modeSelect, sprintDelaySelect, bot1TypeSelect, bot2TypeSelect, botSpeedInput, botDepthInput, dasInput, arrInput, sdfSlider].forEach(element => {
+      element.addEventListener('change', () => {
+        saveSettingsToStorage();
+        updateCachedSettings();
+        updateModeVisibility();
+      });
+      element.addEventListener('input', () => {
+        updateSDFLabel();
+        saveSettingsToStorage();
+        updateCachedSettings();
+      });
+    });
+
+    loadSettingsFromStorage();
+    updateSDFLabel();
+    updateCachedSettings();
+    updateModeVisibility();
+
+    function startTimerIfNeeded() {
+      if (cachedSettings.mode === 'sprint' && !sprintTimerActive && !isCountingDown && !gameOver) {
+        sprintTimerActive = true;
+        sprintStartTime = performance.now();
+      }
+    }
+
+    function startCountdownSequence(onComplete) {
+      if (countdownTimer) clearInterval(countdownTimer);
+
+      const delaySeconds = cachedSettings.sprintDelay;
+      if (delaySeconds <= 0) {
+        isCountingDown = false;
+        countdownOverlay.classList.add('hidden');
+        matchStartTime = performance.now();
+        if (onComplete) onComplete();
+        return;
+      }
+
+      isCountingDown = true;
+      countdownOverlay.classList.remove('hidden');
+
+      let currentCount = delaySeconds;
+      countdownText.textContent = currentCount;
+
+      countdownTimer = setInterval(() => {
+        currentCount--;
+        if (currentCount > 0) {
+          countdownText.textContent = currentCount;
+          countdownText.style.animation = 'none';
+          void countdownText.offsetWidth;
+          countdownText.style.animation = 'popIn 0.28s ease-out';
+        } else if (currentCount === 0) {
+          countdownText.textContent = "GO!";
+          countdownText.style.animation = 'none';
+          void countdownText.offsetWidth;
+          countdownText.style.animation = 'popIn 0.28s ease-out';
+        } else {
+          clearInterval(countdownTimer);
+          countdownTimer = null;
+          isCountingDown = false;
+          matchStartTime = performance.now();
+          countdownOverlay.classList.add('hidden');
+          if (onComplete) onComplete();
+        }
+      }, 1000);
+    }
+
+    function handleInputs(now) {
+      if (!player || gameOver || !gameStarted || isPaused || isCountingDown || cachedSettings.mode === 'bot_vs_bot') return;
+
+      const das = cachedSettings.das;
+      const arr = cachedSettings.arr;
+      const sdfVal = cachedSettings.sdf;
+
+      if (keyState.left.pressed) {
+        if (now - keyState.left.dasTimer >= das) {
+          if (arr === 0) {
+            while (player.moveLeft()) {}
+          } else if (now - keyState.left.arrTimer >= arr) {
+            player.moveLeft();
+            keyState.left.arrTimer = now;
+          }
+        }
+      }
+
+      if (keyState.right.pressed) {
+        if (now - keyState.right.dasTimer >= das) {
+          if (arr === 0) {
+            while (player.moveRight()) {}
+          } else if (now - keyState.right.arrTimer >= arr) {
+            player.moveRight();
+            keyState.right.arrTimer = now;
+          }
+        }
+      }
+
+      if (keyState.softDrop.pressed) {
+        if (sdfVal >= 41) {
+          while (player.moveDown()) {}
+        } else {
+          const softDropInterval = baseGravity / sdfVal;
+          if (now - keyState.softDrop.timer >= softDropInterval) {
+            player.moveDown();
+            keyState.softDrop.timer = now;
+          }
+        }
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.repeat) return;
+
+      if (e.key === 'r' || e.key === 'R') {
+        initGame();
+        return;
+      }
+
+      if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') {
+        togglePause();
+        return;
+      }
+
+      if (!player || gameOver || !gameStarted || isPaused || isCountingDown || cachedSettings.mode === 'bot_vs_bot') return;
+
+      const now = performance.now();
+      if (e.key === 'ArrowLeft') {
+        keyState.left.pressed = true;
+        keyState.right.pressed = false;
+        keyState.left.dasTimer = now;
+        keyState.left.arrTimer = now;
+        player.moveLeft();
+      } else if (e.key === 'ArrowRight') {
+        keyState.right.pressed = true;
+        keyState.left.pressed = false;
+        keyState.right.dasTimer = now;
+        keyState.right.arrTimer = now;
+        player.moveRight();
+      } else if (e.key === 'ArrowDown') {
+        keyState.softDrop.pressed = true;
+        keyState.softDrop.timer = now;
+        player.moveDown();
+      } else if (e.key === 'ArrowUp' || e.key === 'x' || e.key === 'X') {
+        player.rotatePiece(1);
+      } else if (e.key === 'z' || e.key === 'Z' || e.key === 'Control') {
+        player.rotatePiece(-1);
+      } else if (e.key === 'a' || e.key === 'A') {
+        player.rotatePiece(2);
+      } else if (e.key === ' ') {
+        player.hardDrop();
+      } else if (e.key === 'c' || e.key === 'C' || e.key === 'Shift') {
+        player.holdCurrentPiece();
+      }
+    });
+
+    document.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowLeft') keyState.left.pressed = false;
+      if (e.key === 'ArrowRight') keyState.right.pressed = false;
+      if (e.key === 'ArrowDown') keyState.softDrop.pressed = false;
+    });
+
+    function togglePause() {
+      if (!gameStarted || gameOver) return;
+      isPaused = !isPaused;
+      pauseBtn.textContent = isPaused ? "Resume" : "Pause";
+    }
+
+    function handleGameOver(loserEngine) {
+      gameOver = true;
+      sprintTimerActive = false;
+      const overlayTitle = document.getElementById('overlay-title');
+      const overlaySub = document.getElementById('overlay-sub');
+
+      if (cachedSettings.mode === 'bot_vs_bot') {
+        if (loserEngine === player) {
+          overlayTitle.textContent = "BOT 2 WINS!";
+          overlayTitle.className = "win";
+          overlaySub.textContent = `Bot 1 topped out at ${player.linesCleared} lines`;
+        } else {
+          overlayTitle.textContent = "BOT 1 WINS!";
+          overlayTitle.className = "win";
+          overlaySub.textContent = `Bot 2 topped out at ${bot.linesCleared} lines`;
+        }
+      } else if (cachedSettings.mode === 'vs') {
+        if (loserEngine.isBot) {
+          overlayTitle.textContent = "YOU WIN!";
+          overlayTitle.className = "win";
+          overlaySub.textContent = "!!";
+        } else {
+          overlayTitle.textContent = "GAME OVER";
+          overlayTitle.className = "";
+          overlaySub.textContent = "Lol";
+        }
+      } else {
+        overlayTitle.textContent = "GAME OVER";
+        overlayTitle.className = "";
+        overlaySub.textContent = `Lines Cleared: ${player.linesCleared}`;
+      }
+      overlay.classList.remove('hidden');
+    }
+
+    function handleSprintWin(timeMs) {
+      gameOver = true;
+      sprintTimerActive = false;
+
+      const seconds = (timeMs / 1000).toFixed(3);
+      const safeSecs = Math.max(0.001, timeMs / 1000);
+      const pps = (player.piecesPlaced / safeSecs).toFixed(2);
+
+      const overlayTitle = document.getElementById('overlay-title');
+      const overlaySub = document.getElementById('overlay-sub');
+
+      overlayTitle.textContent = "SPRINT COMPLETE!";
+      overlayTitle.className = "win";
+      overlaySub.textContent = `Time: ${seconds}s | PPS: ${pps}`;
+
+      // Reveal the win overlay
+      overlay.classList.remove('hidden');
+    }
+
+    function initGame() {
+      if (countdownTimer) clearInterval(countdownTimer);
+      overlay.classList.add('hidden');
+      countdownOverlay.classList.add('hidden');
+
+      updateCachedSettings();
+
+      gameStarted = true;
+      gameOver = false;
+      isPaused = false;
+      pauseBtn.textContent = "Pause";
+      sprintTimerActive = false;
+      sprintElapsedTime = 0;
+      sprintTimerEl.textContent = "0.000";
+      matchStartTime = 0;
+
+      const isBotVsBot = cachedSettings.mode === 'bot_vs_bot';
+      player = new TetrisEngine('player-canvas', 'player-hold', 'player-next', 'player-garbage-fill', isBotVsBot);
+      bot = new TetrisEngine('bot-canvas', 'bot-hold', 'bot-next', 'bot-garbage-fill', true);
+
+      updateModeVisibility();
+
+      startCountdownSequence(() => {
+        if (cachedSettings.mode === 'sprint' && cachedSettings.sprintDelay > 0) {
+          sprintTimerActive = true;
+          sprintStartTime = performance.now();
+        }
+      });
+    }
+
+    startBtn.addEventListener('click', initGame);
+    pauseBtn.addEventListener('click', togglePause);
+    restartBtn.addEventListener('click', initGame);
+    overlayRestartBtn.addEventListener('click', initGame);
+
+    let lastFrameTime = performance.now();
+
+    function gameLoop(time) {
+      requestAnimationFrame(gameLoop);
+
+      const delta = time - lastFrameTime;
+      lastFrameTime = time;
+
+      if (!gameStarted || isPaused || gameOver) return;
+
+      if (cachedSettings.mode === 'sprint') {
+        if (sprintTimerActive) {
+          sprintElapsedTime = time - sprintStartTime;
+          sprintTimerEl.textContent = (sprintElapsedTime / 1000).toFixed(3);
+        }
+      }
+
+      if (isCountingDown) {
+        player.draw(player.ctx);
+        if (cachedSettings.mode === 'vs' || cachedSettings.mode === 'bot_vs_bot') bot.draw(bot.ctx);
+        return;
+      }
+
+      const elapsedMatchSeconds = matchStartTime ? (time - matchStartTime) / 1000 : 0.001;
+
+      if (cachedSettings.mode === 'bot_vs_bot') {
+        processBotTurn(player, time, cachedSettings.bot1Type, 1);
+        processBotTurn(bot, time, cachedSettings.bot2Type, 2);
+      } else {
+        handleInputs(time);
+
+        if (player && !gameOver) {
+          player.gravityAccumulator += delta;
+          if (player.gravityAccumulator >= baseGravity) {
+            player.moveDown();
+            player.gravityAccumulator = 0;
+          }
+        }
+
+        if (cachedSettings.mode === 'vs') {
+          processBotTurn(bot, time, cachedSettings.bot1Type, 1);
+        }
+      }
+
+      if (player) {
+        player.updateStats(elapsedMatchSeconds);
+        player.draw(player.ctx);
+      }
+      if ((cachedSettings.mode === 'vs' || cachedSettings.mode === 'bot_vs_bot') && bot) {
+        bot.updateStats(elapsedMatchSeconds);
+        bot.draw(bot.ctx);
+      }
+    }
+
+    window.onload = function() {
+      initGame();
+      requestAnimationFrame(gameLoop);
+    };
+  </script>
+</body>
+</html>
