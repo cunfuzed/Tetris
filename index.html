@@ -1842,6 +1842,9 @@
         if (localStorage.getItem(STORAGE_KEYS.das) !== null) dasInput.value = localStorage.getItem(STORAGE_KEYS.das);
         if (localStorage.getItem(STORAGE_KEYS.arr) !== null) arrInput.value = localStorage.getItem(STORAGE_KEYS.arr);
         if (localStorage.getItem(STORAGE_KEYS.sdf) !== null) sdfSlider.value = localStorage.getItem(STORAGE_KEYS.sdf);
+        if(botDepthInput.value > 5){
+          botDepthInput.value = 5;
+        }
       } catch (e) {
         console.warn("Unable to load settings:", e);
       }
