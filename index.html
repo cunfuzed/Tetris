@@ -533,7 +533,7 @@
     const BLOCK_SIZE = 24;
 
     const PIECE_IDS = { I: 1, J: 2, L: 3, O: 4, S: 5, T: 6, Z: 7, G: 8 };
-
+    /**
     const SHAPES = {
       I: [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
       J: [[1,0,0],[1,1,1],[0,0,0]],
@@ -542,6 +542,16 @@
       S: [[0,1,1],[1,1,0],[0,0,0]],
       T: [[0,1,0],[1,1,1],[0,0,0]],
       Z: [[1,1,0],[0,1,1],[0,0,0]]
+    };
+    **/
+   const SHAPES = {
+      I: [[0,1], [0,1]],
+      J: [[0,1], [0,1]],
+      L: [[0,1], [0,1]],
+      O: [[0,1], [0,1]],
+      S: [[0,1], [0,1]],
+      T: [[0,1], [0,1]],
+      Z: [[0,1], [0,1]]
     };
 
     const COLORS = {
@@ -1020,7 +1030,7 @@
         }
 
         if (isPerfectClear) {
-          baseGarbage += 20;
+          baseGarbage += 10;
           actionName = actionName ? `PC ${actionName}` : "PERFECT CLEAR";
           isDifficult = true;
         }
@@ -2059,6 +2069,10 @@
     }
 
     document.addEventListener('keydown', (e) => {
+      if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+      }
+
       if (e.repeat) return;
 
       if (e.key === 'r' || e.key === 'R') {
