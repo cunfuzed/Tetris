@@ -340,49 +340,9 @@
       <label for="mode-select">Mode: </label>
       <select id="mode-select">
         <option value="vs">Player VS Bot</option>
-        <option value="bot_vs_bot">Bot VS Bot</option>
         <option value="marathon">Zen</option>
-        <option value="sprint">40-Line Sprint</option>
+        <option value="sprint">40-Lines</option>
       </select>
-    </div>
-    <div class="input-group" id="sprint-delay-container">
-      <label for="sprint-delay">Start Delay: </label>
-      <select id="sprint-delay">
-        <option value="3">3 Seconds</option>
-        <option value="2">2 Seconds</option>
-        <option value="1">1 Second</option>
-        <option value="0">Off (0s)</option>
-      </select>
-    </div>
-
-    <!-- Bot 1 Controls (Left) -->
-    <div class="input-group" id="bot1-type-container">
-      <label for="bot1-type" id="bot1-label">Bot Type: </label>
-      <select id="bot1-type">
-        <option value="custom">Custom Genome 1</option>
-        <option value="standard">Standard</option>
-        <option value="aggressive">Aggressive</option>
-        <option value="defensive">Defensive</option>
-        <option value="novice">Novice</option>
-      </select>
-    </div>
-    <div class="input-group" id="custom-genome1-container">
-      <button id="edit-genome1-btn">Edit Genome 1</button>
-    </div>
-
-    <!-- Bot 2 Controls (Right) -->
-    <div class="input-group" id="bot2-type-container">
-      <label for="bot2-type">Bot 2 Type: </label>
-      <select id="bot2-type">
-        <option value="custom">Custom Genome 2</option>
-        <option value="standard">Standard</option>
-        <option value="aggressive">Aggressive</option>
-        <option value="defensive">Defensive</option>
-        <option value="novice">Novice</option>
-      </select>
-    </div>
-    <div class="input-group" id="custom-genome2-container">
-      <button id="edit-genome2-btn">Edit Genome 2</button>
     </div>
 
     <div class="input-group" id="bot-speed-container">
@@ -422,7 +382,7 @@
         <div class="panel-box"><h3>Next</h3><canvas id="player-next" width="70" height="280"></canvas></div>
         <div class="panel-box"><h3>Combo</h3><div id="player-combo" class="stat-value">0</div></div>
         <div class="panel-box">
-          <h3>B2B / Surge</h3>
+          <h3>B2B</h3>
           <div id="player-b2b" class="stat-value">None</div>
           <div class="surge-meter-container"><div id="player-surge-fill" class="surge-meter-fill"></div></div>
         </div>
@@ -492,23 +452,6 @@
       "comfortableStackReward": 102476
     };
 
-    const DEFAULT_GENOME_2 = {
-      "tetrisReward": 500000,
-      "lineReward": 15000,
-      "holesPenalty": 350000,
-      "heightPenalty": 12000,
-      "bumpinessPenalty": 800,
-      "stackFlatnessReward": 15000,
-      "dependencyPenalty": 80000,
-      "dangerHeightPenalty": 300000,
-      "downstackReward": 60000,
-      "comfortableStackHeight": 4,
-      "comfortableHeightPenalty": 20000,
-      "comfortableStackReward": 80000
-    };
-
-    let editingGenomeSlot = 1;
-
     function getActiveGenome(slot = 1) {
       const key = `tetris_bot_genome_${slot}`;
       const saved = localStorage.getItem(key) || localStorage.getItem('tetris_bot_genome');
@@ -519,14 +462,6 @@
       } catch {
         return { ...defaultG };
       }
-    }
-
-    function saveGenome(slot, genome) {
-      localStorage.setItem(`tetris_bot_genome_${slot}`, JSON.stringify(genome, null, 2));
-    }
-
-    function resetGenomeToDefault(slot) {
-      localStorage.removeItem(`tetris_bot_genome_${slot}`);
     }
 
     const COLS = 10;
@@ -591,16 +526,6 @@
     computeRotations();
 
     const modeSelect = document.getElementById('mode-select');
-    const sprintDelaySelect = document.getElementById('sprint-delay');
-    const bot1TypeSelect = document.getElementById('bot1-type');
-    const bot2TypeSelect = document.getElementById('bot2-type');
-    const bot1Label = document.getElementById('bot1-label');
-    const bot1TypeContainer = document.getElementById('bot1-type-container');
-    const bot2TypeContainer = document.getElementById('bot2-type-container');
-    const customGenome1Container = document.getElementById('custom-genome1-container');
-    const customGenome2Container = document.getElementById('custom-genome2-container');
-    const editGenome1Btn = document.getElementById('edit-genome1-btn');
-    const editGenome2Btn = document.getElementById('edit-genome2-btn');
     const botSpeedInput = document.getElementById('bot-speed');
     const botDepthInput = document.getElementById('bot-depth');
     const dasInput = document.getElementById('das-input');
@@ -633,23 +558,18 @@
       arr: 0,
       sdf: 20,
       bot1Type: 'custom',
-      bot2Type: 'custom',
-      botSpeed: 3.5,
+      botSpeed: 1,
       botDepth: 2,
       mode: 'vs',
-      sprintDelay: 3
     };
 
     function updateCachedSettings() {
       cachedSettings.das = parseInt(dasInput.value) || 120;
       cachedSettings.arr = parseInt(arrInput.value) || 0;
       cachedSettings.sdf = parseInt(sdfSlider.value) || 20;
-      cachedSettings.bot1Type = bot1TypeSelect.value || 'custom';
-      cachedSettings.bot2Type = bot2TypeSelect.value || 'custom';
       cachedSettings.botSpeed = parseFloat(botSpeedInput.value) || 3.5;
       cachedSettings.botDepth = parseInt(botDepthInput.value) || 2;
       cachedSettings.mode = modeSelect.value;
-      cachedSettings.sprintDelay = parseInt(sprintDelaySelect.value) || 0;
     }
 
     let gameStarted = false;
@@ -1279,7 +1199,8 @@
         }
       }
     }
-
+    
+    // some stuff to do with the bot, idk
     function getStandardLandings(botInstance, pieceType, targetGrid = null) {
       const gridToUse = targetGrid || botInstance.grid;
       const landings = [];
@@ -1802,11 +1723,11 @@
       }
     }
 
+    //settings
     const STORAGE_KEYS = {
       mode: 'tetris_vs_mode',
       sprintDelay: 'tetris_vs_sprintdelay',
       bot1Type: 'tetris_vs_bot1type',
-      bot2Type: 'tetris_vs_bot2type',
       botSpeed: 'tetris_vs_botspeed',
       botDepth: 'tetris_vs_botdepth',
       das: 'tetris_vs_das',
@@ -1817,9 +1738,6 @@
     function saveSettingsToStorage() {
       try {
         localStorage.setItem(STORAGE_KEYS.mode, modeSelect.value);
-        localStorage.setItem(STORAGE_KEYS.sprintDelay, sprintDelaySelect.value);
-        localStorage.setItem(STORAGE_KEYS.bot1Type, bot1TypeSelect.value);
-        localStorage.setItem(STORAGE_KEYS.bot2Type, bot2TypeSelect.value);
         localStorage.setItem(STORAGE_KEYS.botSpeed, botSpeedInput.value);
         localStorage.setItem(STORAGE_KEYS.botDepth, botDepthInput.value);
         localStorage.setItem(STORAGE_KEYS.das, dasInput.value);
@@ -1833,14 +1751,12 @@
     function loadSettingsFromStorage() {
       try {
         if (localStorage.getItem(STORAGE_KEYS.mode) !== null) modeSelect.value = localStorage.getItem(STORAGE_KEYS.mode);
-        if (localStorage.getItem(STORAGE_KEYS.sprintDelay) !== null) sprintDelaySelect.value = localStorage.getItem(STORAGE_KEYS.sprintDelay);
-        if (localStorage.getItem(STORAGE_KEYS.bot1Type) !== null) bot1TypeSelect.value = localStorage.getItem(STORAGE_KEYS.bot1Type);
-        if (localStorage.getItem(STORAGE_KEYS.bot2Type) !== null) bot2TypeSelect.value = localStorage.getItem(STORAGE_KEYS.bot2Type);
         if (localStorage.getItem(STORAGE_KEYS.botSpeed) !== null) botSpeedInput.value = localStorage.getItem(STORAGE_KEYS.botSpeed);
         if (localStorage.getItem(STORAGE_KEYS.botDepth) !== null) botDepthInput.value = localStorage.getItem(STORAGE_KEYS.botDepth);
         if (localStorage.getItem(STORAGE_KEYS.das) !== null) dasInput.value = localStorage.getItem(STORAGE_KEYS.das);
         if (localStorage.getItem(STORAGE_KEYS.arr) !== null) arrInput.value = localStorage.getItem(STORAGE_KEYS.arr);
         if (localStorage.getItem(STORAGE_KEYS.sdf) !== null) sdfSlider.value = localStorage.getItem(STORAGE_KEYS.sdf);
+        //AHEM BAO
         if(botDepthInput.value > 5){
           botDepthInput.value = 5;
         }
@@ -1859,43 +1775,13 @@
 
       if (mode === 'vs') {
         botContainer.classList.remove('hidden');
-        bot1TypeContainer.classList.remove('hidden');
-        bot1Label.textContent = "Bot Type: ";
-        bot2TypeContainer.classList.add('hidden');
-        customGenome2Container.classList.add('hidden');
         botSpeedContainer.classList.remove('hidden');
         botDepthContainer.classList.remove('hidden');
         playerHandlingContainer.classList.remove('hidden');
         sprintTimerBox.classList.add('hidden');
         if (linesLabelHeader) linesLabelHeader.textContent = "Lines";
-        if (bot1TypeSelect.value === 'custom') {
-          customGenome1Container.classList.remove('hidden');
-        } else {
-          customGenome1Container.classList.add('hidden');
-        }
-      } else if (mode === 'bot_vs_bot') {
-        botContainer.classList.remove('hidden');
-        bot1TypeContainer.classList.remove('hidden');
-        bot1Label.textContent = "Bot 1 Type: ";
-        bot2TypeContainer.classList.remove('hidden');
-        botSpeedContainer.classList.remove('hidden');
-        botDepthContainer.classList.remove('hidden');
-        playerHandlingContainer.classList.add('hidden');
-        sprintTimerBox.classList.add('hidden');
-        if (linesLabelHeader) linesLabelHeader.textContent = "Lines";
-
-        if (bot1TypeSelect.value === 'custom') customGenome1Container.classList.remove('hidden');
-        else customGenome1Container.classList.add('hidden');
-
-        if (bot2TypeSelect.value === 'custom') customGenome2Container.classList.remove('hidden');
-        else customGenome2Container.classList.add('hidden');
-
-      } else if (mode === 'sprint') {
+      }else if (mode === 'sprint') {
         botContainer.classList.add('hidden');
-        bot1TypeContainer.classList.add('hidden');
-        bot2TypeContainer.classList.add('hidden');
-        customGenome1Container.classList.add('hidden');
-        customGenome2Container.classList.add('hidden');
         botSpeedContainer.classList.add('hidden');
         botDepthContainer.classList.add('hidden');
         playerHandlingContainer.classList.remove('hidden');
@@ -1903,10 +1789,6 @@
         if (linesLabelHeader) linesLabelHeader.textContent = "Left";
       } else {
         botContainer.classList.add('hidden');
-        bot1TypeContainer.classList.add('hidden');
-        bot2TypeContainer.classList.add('hidden');
-        customGenome1Container.classList.add('hidden');
-        customGenome2Container.classList.add('hidden');
         botSpeedContainer.classList.add('hidden');
         botDepthContainer.classList.add('hidden');
         playerHandlingContainer.classList.remove('hidden');
@@ -1914,42 +1796,7 @@
         if (linesLabelHeader) linesLabelHeader.textContent = "Lines";
       }
     }
-
-    editGenome1Btn.addEventListener('click', () => {
-      editingGenomeSlot = 1;
-      modalTitle.textContent = "BOT 1 GENOME JSON";
-      genomeJsonInput.value = JSON.stringify(getActiveGenome(1), null, 2);
-      genomeModal.classList.remove('hidden');
-    });
-
-    editGenome2Btn.addEventListener('click', () => {
-      editingGenomeSlot = 2;
-      modalTitle.textContent = "BOT 2 GENOME JSON";
-      genomeJsonInput.value = JSON.stringify(getActiveGenome(2), null, 2);
-      genomeModal.classList.remove('hidden');
-    });
-
-    closeGenomeBtn.addEventListener('click', () => {
-      genomeModal.classList.add('hidden');
-    });
-
-    saveGenomeBtn.addEventListener('click', () => {
-      try {
-        const parsed = JSON.parse(genomeJsonInput.value);
-        saveGenome(editingGenomeSlot, parsed);
-        genomeModal.classList.add('hidden');
-      } catch (e) {
-        alert('Invalid JSON format! Please check your syntax.');
-      }
-    });
-
-    resetGenomeBtn.addEventListener('click', () => {
-      resetGenomeToDefault(editingGenomeSlot);
-      const defaultG = editingGenomeSlot === 1 ? DEFAULT_GENOME_1 : DEFAULT_GENOME_2;
-      genomeJsonInput.value = JSON.stringify(defaultG, null, 2);
-    });
-
-    [modeSelect, sprintDelaySelect, bot1TypeSelect, bot2TypeSelect, botSpeedInput, botDepthInput, dasInput, arrInput, sdfSlider].forEach(element => {
+    [modeSelect, botSpeedInput, botDepthInput, dasInput, arrInput, sdfSlider].forEach(element => {
       element.addEventListener('change', () => {
         saveSettingsToStorage();
         updateCachedSettings();
@@ -1974,10 +1821,10 @@
       }
     }
 
-    function startCountdownSequence(onComplete) {
+    function startCountdownSequence(onComplete, seconds = 3) {
       if (countdownTimer) clearInterval(countdownTimer);
 
-      const delaySeconds = cachedSettings.sprintDelay;
+      let delaySeconds = seconds; // Set to 0 for immediate start, change to desired countdown seconds if needed
       if (delaySeconds <= 0) {
         isCountingDown = false;
         countdownOverlay.classList.add('hidden');
@@ -2000,7 +1847,7 @@
           void countdownText.offsetWidth;
           countdownText.style.animation = 'popIn 0.28s ease-out';
         } else if (currentCount === 0) {
-          countdownText.textContent = "GO!";
+          countdownText.textContent = "STACK!";
           countdownText.style.animation = 'none';
           void countdownText.offsetWidth;
           countdownText.style.animation = 'popIn 0.28s ease-out';
@@ -2187,18 +2034,25 @@
       sprintTimerEl.textContent = "0.000";
       matchStartTime = 0;
 
-      const isBotVsBot = cachedSettings.mode === 'bot_vs_bot';
-      player = new TetrisEngine('player-canvas', 'player-hold', 'player-next', 'player-garbage-fill', isBotVsBot);
+      player = new TetrisEngine('player-canvas', 'player-hold', 'player-next', 'player-garbage-fill');
       bot = new TetrisEngine('bot-canvas', 'bot-hold', 'bot-next', 'bot-garbage-fill', true);
 
       updateModeVisibility();
+
+      //decide delay based on mode
+      let waitTime = 3;
+      if (cachedSettings.mode === 'sprint') {
+        waitTime = 1;
+      }else{
+        waitTime = 3;
+      }
 
       startCountdownSequence(() => {
         if (cachedSettings.mode === 'sprint' && cachedSettings.sprintDelay > 0) {
           sprintTimerActive = true;
           sprintStartTime = performance.now();
         }
-      });
+      }, waitTime);
     }
 
     startBtn.addEventListener('click', initGame);
@@ -2225,36 +2079,31 @@
 
       if (isCountingDown) {
         player.draw(player.ctx);
-        if (cachedSettings.mode === 'vs' || cachedSettings.mode === 'bot_vs_bot') bot.draw(bot.ctx);
+        if (cachedSettings.mode === 'vs' ) bot.draw(bot.ctx);
         return;
       }
 
       const elapsedMatchSeconds = matchStartTime ? (time - matchStartTime) / 1000 : 0.001;
 
-      if (cachedSettings.mode === 'bot_vs_bot') {
-        processBotTurn(player, time, cachedSettings.bot1Type, 1);
-        processBotTurn(bot, time, cachedSettings.bot2Type, 2);
-      } else {
-        handleInputs(time);
+    handleInputs(time);
 
-        if (player && !gameOver) {
-          player.gravityAccumulator += delta;
-          if (player.gravityAccumulator >= baseGravity) {
-            player.moveDown();
-            player.gravityAccumulator = 0;
-          }
+    if (player && !gameOver) {
+        player.gravityAccumulator += delta;
+        if (player.gravityAccumulator >= baseGravity) {
+        player.moveDown();
+        player.gravityAccumulator = 0;
         }
+    }
 
-        if (cachedSettings.mode === 'vs') {
-          processBotTurn(bot, time, cachedSettings.bot1Type, 1);
-        }
-      }
+    if (cachedSettings.mode === 'vs') {
+        processBotTurn(bot, time, cachedSettings.bot1Type, 1);
+    }
 
       if (player) {
         player.updateStats(elapsedMatchSeconds);
         player.draw(player.ctx);
       }
-      if ((cachedSettings.mode === 'vs' || cachedSettings.mode === 'bot_vs_bot') && bot) {
+      if ((cachedSettings.mode === 'vs') && bot) {
         bot.updateStats(elapsedMatchSeconds);
         bot.draw(bot.ctx);
       }
