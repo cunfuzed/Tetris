@@ -719,6 +719,7 @@
             this.currentPiece.x = testX;
             this.currentPiece.y = testY;
             this.currentPiece.rotation = newRot;
+            this.lastKick = i;
             this.lastActionWasRotate = true;
             this.resetLockDelay();
             return;
@@ -867,31 +868,12 @@
         const len = matrix.length;
         this.piecesPlaced++;
 
-        let isTSpin = false;
-        let isAllSpin = false;
-
+        let spin = 0; // 0 none, 1 mini, 2 full T-spin
         if (this.lastActionWasRotate) {
-          const cx = this.currentPiece.x;
-          const cy = this.currentPiece.y;
-          const cantMoveLeft = this.checkCollision(matrix, cx - 1, cy);
-          const cantMoveRight = this.checkCollision(matrix, cx + 1, cy);
-          const cantMoveUp = this.checkCollision(matrix, cx, cy - 1);
-          const cantMoveDown = this.checkCollision(matrix, cx, cy + 1);
-
-          if (cantMoveLeft && cantMoveRight && (cantMoveUp || cantMoveDown)) {
-            if (this.currentPiece.type === 'T') {
-              const corners = [[cx, cy], [cx + 2, cy], [cx, cy + 2], [cx + 2, cy + 2]];
-              let occupied = 0;
-              for (const [x, y] of corners) {
-                if (x < 0 || x >= COLS || y >= ROWS) occupied++;
-                else if (y >= 0 && this.grid[y][x]) occupied++;
-              }
-              if (occupied >= 3) isTSpin = true;
-              else isAllSpin = true;
-            } else {
-              isAllSpin = true;
-            }
-          }
+        const p = this.currentPiece, g = this.grid;
+        spin = detectSpin(p.type, p.rotation, p.x, p.y, this.lastKick,
+            (cx, cy) => this.checkCollision(matrix, cx, cy),
+            (cx, cy) => cx < 0 || cx >= COLS || cy >= ROWS || (cy >= 0 && g[cy][cx] !== 0));
         }
 
         for (let r = 0; r < len; r++) {
@@ -921,17 +903,17 @@
         let isDifficult = false;
         let actionName = "";
 
-        if (isTSpin) {
-          if (linesCleared === 0) { actionName = "T-Spin"; this.score += 400; }
-          else if (linesCleared === 1) { actionName = "T-Spin Single"; baseGarbage = 2; this.score += 800; isDifficult = true; }
-          else if (linesCleared === 2) { actionName = "T-Spin Double"; baseGarbage = 4; this.score += 1200; isDifficult = true; }
-          else if (linesCleared === 3) { actionName = "T-Spin Triple"; baseGarbage = 6; this.score += 1600; isDifficult = true; }
-        } else if (isAllSpin && linesCleared <= 3) {
-          if (linesCleared === 0) { actionName = "All-Spin Mini"; this.score += 100; }
-          else if (linesCleared === 1) { actionName = "All-Spin Single"; baseGarbage = 1; this.score += 200; isDifficult = true; }
-          else if (linesCleared === 2) { actionName = "All-Spin Double"; baseGarbage = 2; this.score += 400; isDifficult = true; }
-          else if (linesCleared === 3) { actionName = "All-Spin Triple"; baseGarbage = 3; this.score += 700; isDifficult = true; }
-        } else {
+        if (spin === 2 && linesCleared <= 3) {
+            actionName = ["T-Spin", "T-Spin Single", "T-Spin Double", "T-Spin Triple"][linesCleared];
+            baseGarbage = [0, 2, 4, 6][linesCleared];
+            this.score += [400, 800, 1200, 1600][linesCleared];
+            isDifficult = linesCleared > 0;
+        } else if (spin === 1) {
+            actionName = `${this.currentPiece.type}-Spin Mini ` + ["", "Single", "Double", "Triple", "Quad"][linesCleared];
+            baseGarbage = [0, 0, 1, 2, 4][linesCleared];
+            this.score += [100, 200, 400, 800, 1600][linesCleared];
+            isDifficult = linesCleared > 0;
+        }else {
           if (linesCleared === 1) { actionName = "Single"; this.score += 100; }
           else if (linesCleared === 2) { actionName = "Double"; baseGarbage = 1; this.score += 300; }
           else if (linesCleared === 3) { actionName = "Triple"; baseGarbage = 2; this.score += 500; }
@@ -1200,529 +1182,275 @@
       }
     }
     
-    // some stuff to do with the bot, idk
-    function getStandardLandings(botInstance, pieceType, targetGrid = null) {
-      const gridToUse = targetGrid || botInstance.grid;
-      const landings = [];
-      const seenKey = new Set();
+    // some stuff to do with the bot, idk (claude carry)
+    // ================= APM BOT v2: bitboard beam search =================
+    const FULL = (1 << COLS) - 1;
+    const ATK = 20; // value of one attack line (all board terms are scaled to this)
 
-      for (let rot = 0; rot < 4; rot++) {
-        const matrix = ROTATED_SHAPES[pieceType][rot];
-        for (let x = -2; x < COLS + 2; x++) {
-          if (botInstance.checkCollision(matrix, x, 0, gridToUse)) continue;
-          let y = 0;
-          while (!botInstance.checkCollision(matrix, x, y + 1, gridToUse)) {
-            y++;
-          }
-          const k = ((x + 5) << 12) | (y << 4) | rot;
-          if (!seenKey.has(k)) {
-            seenKey.add(k);
-            landings.push({ x, y, rot, lastRot: false });
-          }
+    // ---- TETR.IO all-spin detection (shared by the engine and the bot) ----
+    // Returns 0 = no spin, 1 = Mini spin, 2 = full T-spin.
+    // T: 3-corner rule. Full if both corners on the pointed side are filled, or the last kick was the
+    //    final SRS offset (kick index 4, the "TST kick"); otherwise Mini.
+    // Non-T: must be immobile (blocked left, right, up AND down) after a rotation -> Mini.
+    // ALL_MINI_PLUS: an immobile T that fails the 3-corner rule also counts as a Mini.
+
+    const ALL_MINI_PLUS = true;
+
+    function detectSpin(type, rot, x, y, kick, collides, filled) {
+    if (type === 'T') {
+        const A = filled(x, y), B = filled(x + 2, y), C = filled(x, y + 2), D = filled(x + 2, y + 2);
+        if (A + B + C + D >= 3) {
+        const front = rot === 0 ? A && B : rot === 1 ? B && D : rot === 2 ? C && D : A && C;
+        return (front || kick === 4) ? 2 : 1;
         }
-      }
-      return landings;
+        if (!ALL_MINI_PLUS) return 0;
+    }
+    return (collides(x - 1, y) && collides(x + 1, y) && collides(x, y - 1) && collides(x, y + 1)) ? 1 : 0;
     }
 
-    function getReachableLandings(botInstance, pieceType, targetGrid = null) {
-      const gridToUse = targetGrid || botInstance.grid;
-      const landings = [];
-      const visited = new Set();
-
-      const startX = Math.floor((COLS - SHAPES[pieceType][0].length) / 2);
-      const startY = 0;
-      const startRot = 0;
-
-      const startKey = ((startX + 5) << 12) | ((startY + 5) << 4) | startRot;
-      const queue = [{ x: startX, y: startY, rot: startRot, path: [] }];
-      visited.add(startKey);
-
-      let steps = 0;
-
-      while (queue.length > 0 && steps < 3000) {
-        steps++;
-        const state = queue.shift();
-        const matrix = ROTATED_SHAPES[pieceType][state.rot];
-
-        if (botInstance.checkCollision(matrix, state.x, state.y, gridToUse)) continue;
-
-        if (botInstance.checkCollision(matrix, state.x, state.y + 1, gridToUse)) {
-          landings.push({
-            x: state.x,
-            y: state.y,
-            rot: state.rot,
-            lastRot: state.path.length > 0 && state.path[state.path.length - 1].type === 'rotate',
-            path: state.path
-          });
-        }
-
-        function addState(nx, ny, nrot, action) {
-          const key = ((nx + 5) << 12) | ((ny + 5) << 4) | nrot;
-          if (visited.has(key)) return;
-          if (botInstance.checkCollision(ROTATED_SHAPES[pieceType][nrot], nx, ny, gridToUse)) return;
-          visited.add(key);
-          queue.push({ x: nx, y: ny, rot: nrot, path: state.path.concat(action) });
-        }
-
-        if (!botInstance.checkCollision(matrix, state.x - 1, state.y, gridToUse)) addState(state.x - 1, state.y, state.rot, { type: 'left' });
-        if (!botInstance.checkCollision(matrix, state.x + 1, state.y, gridToUse)) addState(state.x + 1, state.y, state.rot, { type: 'right' });
-        if (!botInstance.checkCollision(matrix, state.x, state.y + 1, gridToUse)) addState(state.x, state.y + 1, state.rot, { type: 'down' });
-
-        for (const dir of [1, -1, 2]) {
-          const newRot = (state.rot + dir + 4) % 4;
-          const rotatedMatrix = ROTATED_SHAPES[pieceType][newRot];
-          const kickTable = pieceType === 'I' ? KICKS_I : KICKS_JLSTZ;
-          const kickKey = `${state.rot}->${newRot}`;
-          const kicks = kickTable[kickKey] || [[0, 0]];
-
-          for (const [dx, dy] of kicks) {
-            const testX = state.x + dx;
-            const testY = state.y - dy;
-
-            if (!botInstance.checkCollision(rotatedMatrix, testX, testY, gridToUse)) {
-              let rotationType = dir === 1 ? 'rotateCW' : dir === -1 ? 'rotateCCW' : 'rotate180';
-              addState(testX, testY, newRot, { type: rotationType, dir });
-              break;
-            }
-          }
-        }
-      }
-
-      if (landings.length === 0) {
-        return getStandardLandings(botInstance, pieceType, targetGrid);
-      }
-      return landings;
+    const PC = {};
+    for (const t in ROTATED_SHAPES) {
+    PC[t] = ROTATED_SHAPES[t].map(m => {
+        const a = [];
+        for (let r = 0; r < m.length; r++) for (let c = 0; c < m.length; c++) if (m[r][c]) a.push(r, c);
+        return a;
+    });
+    }
+    const KCACHE = {};
+    function getKicks(type, a, b) {
+    const k = (type === 'I' ? 'I' : 'x') + a + b;
+    return KCACHE[k] || (KCACHE[k] = (type === 'I' ? KICKS_I : KICKS_JLSTZ)[`${a}->${b}`] || [[0, 0]]);
     }
 
-    function fastCloneGrid(grid) {
-      const copy = new Array(ROWS);
-      for (let r = 0; r < ROWS; r++) {
-        copy[r] = grid[r].slice();
-      }
-      return copy;
+    function toRows(grid) {
+    const rows = new Uint16Array(ROWS);
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (grid[r][c]) rows[r] |= 1 << c;
+    return rows;
     }
 
-    function evaluateMove(botInstance, state, pieceType, targetGrid = null, botType = 'custom', genomeSlot = 1) {
-      const grid = targetGrid || botInstance.grid;
-      let tempGrid = fastCloneGrid(grid);
-      let matrix = ROTATED_SHAPES[pieceType][state.rot];
-      const mLen = matrix.length;
-      const pieceVal = COLORS[pieceType];
+    function hit(a, x, y, rows) {
+    for (let i = 0; i < 8; i += 2) {
+        const cx = x + a[i + 1], cy = y + a[i];
+        if (cx < 0 || cx >= COLS || cy >= ROWS) return true;
+        if (cy >= 0 && ((rows[cy] >> cx) & 1)) return true;
+    }
+    return false;
+    }
 
-      for (let r = 0; r < mLen; r++) {
-        for (let c = 0; c < mLen; c++) {
-          if (matrix[r][c]) {
-            const gy = state.y + r;
-            const gx = state.x + c;
-            if (gy >= 0 && gy < ROWS && gx >= 0 && gx < COLS) {
-              tempGrid[gy][gx] = pieceVal;
-            }
-          }
+    function cellsKey(a, x, y) {
+    const v = [];
+    for (let i = 0; i < 8; i += 2) v.push((y + a[i]) * 10 + x + a[i + 1] + 50);
+    v.sort((p, q) => p - q);
+    return ((v[0] * 256 + v[1]) * 256 + v[2]) * 256 + v[3];
+    }
+
+    // BFS over (x, y, rot, lastActionWasRotate). Actions: 1=L 2=R 3=Down 4=CW 5=CCW 6=180
+    function placements(type, rows) {
+    const P = PC[type];
+    const sx = Math.floor((COLS - SHAPES[type][0].length) / 2);
+    if (hit(P[0], sx, 0, rows)) return [];
+    const N = 3 * 4 * 26 * 16;
+    const par = new Int32Array(N).fill(-1), act = new Int8Array(N), seen = new Uint8Array(N), q = new Int32Array(N);
+    const id = (f, r, y, x) => ((((f * 4 + r) * 26 + (y + 3)) << 4) | (x + 3));
+    const res = [], dd = new Set();
+    let h = 0, t = 0;
+    const s0 = id(0, 0, 0, sx);
+    seen[s0] = 1; q[t++] = s0;
+    const push = (n, s, ac) => { if (!seen[n]) { seen[n] = 1; par[n] = s; act[n] = ac; q[t++] = n; } };
+
+    while (h < t) {
+        const s = q[h++];
+        const x = (s & 15) - 3, yr = s >> 4, y = (yr % 26) - 3, fr = Math.floor(yr / 26);
+        const rot = fr & 3, f = fr >> 2, a = P[rot];
+
+        if (hit(a, x, y + 1, rows)) {
+        const key = cellsKey(a, x, y) * 3 + f;
+        if (!dd.has(key)) { dd.add(key); res.push({ type, rot, x, y, f, s, par, act }); }
+        } else push(id(0, rot, y + 1, x), s, 3);
+
+        if (!hit(a, x - 1, y, rows)) push(id(0, rot, y, x - 1), s, 1);
+        if (!hit(a, x + 1, y, rows)) push(id(0, rot, y, x + 1), s, 2);
+
+        for (const [dir, ac] of [[1, 4], [-1, 5], [2, 6]]) {
+        const nr = (rot + dir + 4) % 4;
+        const ks = getKicks(type, rot, nr);
+        for (let i = 0; i < ks.length; i++) {
+            const tx = x + ks[i][0], ty = y - ks[i][1];
+            if (ty < -2 || tx < -3 || tx > 12) continue;
+            if (!hit(P[nr], tx, ty, rows)) { push(id(type === 'T' && i === 4 ? 2 : 1, nr, ty, tx), s, ac); break; }
         }
-      }
-
-      let linesCleared = 0;
-      let garbageLinesCleared = 0;
-      for (let r = ROWS - 1; r >= 0; r--) {
-        if (tempGrid[r].every(cell => cell !== 0)) {
-          if (tempGrid[r].some(cell => cell === COLORS.G)) {
-            garbageLinesCleared++;
-          }
-          tempGrid.splice(r, 1);
-          tempGrid.unshift(Array(COLS).fill(0));
-          linesCleared++;
-          r++;
         }
-      }
+    }
+    return res;
+    }
 
-      let colHeights = new Array(COLS).fill(0);
-      let standardHoles = 0;
-      let coveredBlocks = 0;
+    function pathOf(pl) {
+    const p = [];
+    let s = pl.s;
+    while (pl.par[s] >= 0) { p.push(pl.act[s]); s = pl.par[s]; }
+    return p.reverse();
+    }
 
-      for (let c = 0; c < COLS; c++) {
-        let blockFound = false;
-        let blocksAbove = 0;
+    // Mirrors the engine's lock logic (spin detection, attack table, combo, B2B, surge, garbage)
+    function simulate(rows, pl, st) {
+    const a = PC[pl.type][pl.rot], x = pl.x, y = pl.y;
+    let spin = 0; // 0 none, 1 mini, 2 full T-spin
+    if (pl.f) {
+        spin = detectSpin(pl.type, pl.rot, x, y, pl.f === 2 ? 4 : -1,
+        (cx, cy) => hit(a, cx, cy, rows),
+        (cx, cy) => cx < 0 || cx >= COLS || cy >= ROWS || (cy >= 0 && ((rows[cy] >> cx) & 1)));
+    }
+    const nr = rows.slice();
+    for (let i = 0; i < 8; i += 2) {
+        const gy = y + a[i], gx = x + a[i + 1];
+        if (gy >= 0 && gy < ROWS) nr[gy] |= 1 << gx;
+    }
+    let out = new Uint16Array(ROWS), w = ROWS - 1, n = 0;
+    for (let r = ROWS - 1; r >= 0; r--) { if (nr[r] === FULL) n++; else out[w--] = nr[r]; }
+
+    let base = 0, diff = false;
+    if (spin === 2 && n > 0 && n <= 3) { base = [0, 2, 4, 6][n]; diff = true; }
+    else if (spin === 1 && n > 0) { base = [0, 0, 1, 2, 4][n]; diff = true; } // minis: keep/add B2B, send like a plain clear
+    else if (n === 1) base = 0; else if (n === 2) base = 1; else if (n === 3) base = 2;
+    else if (n === 4) { base = 4; diff = true; }
+    const pc = n > 0 && out.every(v => v === 0);
+    if (pc) { base += 10; diff = true; }
+
+    let combo = st.combo, b2b = st.b2b, pend = st.pend, atk = 0, recv = 0;
+    if (n > 0) {
+        combo++;
+        const CT = [0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5];
+        const cg = combo > 0 ? CT[Math.min(combo, 11)] : 0;
+        let surge = 0;
+        if (diff) b2b++;
+        else { if (b2b >= 4) surge = b2b - 3; b2b = 0; }
+        atk = base + cg + (diff && b2b > 1 ? 1 : 0) + surge;
+        pend -= Math.min(atk, pend);
+    } else {
+        combo = -1;
+        if (pend > 0) {
+        recv = Math.min(8, pend); pend -= recv;
+        let hole = 0, best = 99;
+        for (let c = 0; c < COLS; c++) {
+            let cnt = 0; for (let r = 0; r < ROWS; r++) cnt += (out[r] >> c) & 1;
+            if (cnt < best) { best = cnt; hole = c; }
+        }
+        for (let i = 0; i < ROWS - recv; i++) out[i] = out[i + recv];
+        for (let i = ROWS - recv; i < ROWS; i++) out[i] = FULL & ~(1 << hole);
+        }
+    }
+    return { rows: out, combo, b2b, pend, atk, recv, pc, dead: (out[0] | out[1]) & 0x78 };
+    }
+
+    function evalBoard(rows, s) {
+    const h = new Int8Array(COLS);
+    let holes = 0;
+    for (let c = 0; c < COLS; c++) {
+        let top = -1;
         for (let r = 0; r < ROWS; r++) {
-          if (tempGrid[r][c] !== 0) {
-            if (!blockFound) {
-              colHeights[c] = ROWS - r;
-              blockFound = true;
-            }
-            blocksAbove++;
-          } else if (blockFound) {
-            standardHoles++;
-            coveredBlocks += blocksAbove;
-          }
+        if ((rows[r] >> c) & 1) { if (top < 0) { top = r; h[c] = ROWS - r; } }
+        else if (top >= 0) holes++;
         }
-      }
+    }
+    let well = 0, wm = 99, maxH = 0, agg = 0;
+    for (let c = 0; c < COLS; c++) {
+        const v = h[c] - ((c === 0 || c === COLS - 1) ? 0.5 : 0);
+        if (v < wm) { wm = v; well = c; }
+        if (h[c] > maxH) maxH = h[c];
+        agg += h[c];
+    }
+    let bump = 0, prev = -1, valley = 0;
+    for (let c = 0; c < COLS; c++) {
+        if (c === well) continue;
+        if (prev >= 0) bump += Math.abs(h[c] - h[prev]);
+        prev = c;
+        const l = (c === 0 || c - 1 === well) ? 99 : h[c - 1];
+        const r = (c === COLS - 1 || c + 1 === well) ? 99 : h[c + 1];
+        const m = Math.min(l, r);
+        if (m === 99) continue;
+        if (m - h[c] >= 2) valley += m - h[c] - 1;
+    }
+    const wb = 1 << well, tgt = FULL & ~wb;
+    let rdy = 0, wf = 0;
+    for (let r = 0; r < ROWS; r++) { if (rows[r] === tgt) rdy++; if (rows[r] & wb) wf++; }
 
-      let garbageHeight = 0;
-      for (let c = 0; c < COLS; c++) {
-        for (let r = 0; r < ROWS; r++) {
-          if (tempGrid[r][c] === COLORS.G) {
-            const h = ROWS - r;
-            if (h > garbageHeight) garbageHeight = h;
-          }
-        }
-      }
-
-      let dependencies = 0;
-      for (let c = 1; c < COLS-1; c++) {
-        let leftH = (c > 0) ? colHeights[c - 1] : 20;
-        let rightH = (c < COLS - 1) ? colHeights[c + 1] : 20;
-        let minNeighbor = Math.min(leftH, rightH);
-        let depth = minNeighbor - colHeights[c];
-        if (depth >= 2) {
-          dependencies += (depth >= 3) ? 2 : 1;
-        }
-      }
-
-      let stackCols = colHeights.slice(1);
-      let stackMaxHeight = Math.max(...stackCols);
-      let stackMinHeight = Math.min(...stackCols);
-      let aggregateHeight = colHeights.reduce((a, b) => a + b, 0);
-      let totalMaxHeight = Math.max(...colHeights);
-
-      let bumpiness = 0;
-      for (let c = 0; c < COLS - 1; c++) {
-        bumpiness += Math.abs(colHeights[c] - colHeights[c + 1]);
-      }
-
-      let effectiveHeight = totalMaxHeight + (botInstance.garbagePending || 0);
-      let isInDanger = effectiveHeight >= 14;
-
-      let score = 0;
-
-      if (botType === 'custom') {
-        const genome = getActiveGenome(genomeSlot);
-
-        if (linesCleared === 4) {
-          score += genome.tetrisReward;
-        } else if (linesCleared > 0) {
-          score += linesCleared * genome.lineReward;
-        }
-
-        if (totalMaxHeight <= genome.comfortableStackHeight) {
-          score += genome.comfortableStackReward;
-        } else {
-          const heightExcess = totalMaxHeight - genome.comfortableStackHeight;
-          score -= heightExcess * genome.comfortableHeightPenalty;
-        }
-
-        if (totalMaxHeight > 15) {
-          score -= (totalMaxHeight - 15) * genome.dangerHeightPenalty;
-        }
-
-        score -= standardHoles * genome.holesPenalty;
-        score -= aggregateHeight * genome.heightPenalty;
-        score -= bumpiness * genome.bumpinessPenalty;
-        score -= dependencies * genome.dependencyPenalty;
-
-        let stackFlatness = Math.max(0, 20 - bumpiness);
-        score += stackFlatness * genome.stackFlatnessReward;
-
-        if (garbageLinesCleared > 0) {
-          score += genome.downstackReward;
-        }
-
-      } else if (botType === 'aggressive') {
-        let stackHeightDiff = stackMaxHeight - stackMinHeight;
-        if (isInDanger) {
-          score += linesCleared * 90000;
-          score += garbageLinesCleared * 70000;
-          score -= effectiveHeight * 18000;
-          score -= standardHoles * 400000;
-        } else {
-          if (linesCleared === 4) {
-            score += 350000 + (botInstance.b2bCount >= 1 ? 120000 : 0);
-          } else if (linesCleared > 0) {
-            score -= linesCleared * 80000;
-          }
-        }
-        if (stackHeightDiff <= 2) score += 45000;
-        score -= dependencies * 20000;
-        score -= standardHoles * 300000;
-        score -= (stackMaxHeight - stackMinHeight) * 10000;
-
-      } else if (botType === 'defensive') {
-        let stackHeightDiff = stackMaxHeight - stackMinHeight;
-        if (isInDanger || totalMaxHeight > 8) {
-          score += linesCleared * 120000;
-          score += garbageLinesCleared * 150000;
-          score -= effectiveHeight * 40000;
-          score -= standardHoles * 800000;
-        } else {
-          score += linesCleared * 70000;
-          score += garbageLinesCleared * 100000;
-          score -= aggregateHeight * 150;
-          score -= standardHoles * 500000;
-        }
-        if (stackHeightDiff <= 2) score += 45000;
-        score -= dependencies * 60000;
-        score -= (stackMaxHeight - stackMinHeight) * 30000;
-
-      } else if (botType === 'novice') {
-        let stackHeightDiff = stackMaxHeight - stackMinHeight;
-        if (isInDanger) {
-          score += linesCleared * 80000;
-          score -= effectiveHeight * 25000;
-          score -= standardHoles * 500000;
-        } else {
-          if (linesCleared === 4) score += 220000;
-          else if (linesCleared > 0) score += linesCleared * 20000;
-        }
-        score -= standardHoles * 200000;
-        score -= (stackMaxHeight - stackMinHeight) * 10000;
-        score += (Math.random() - 0.5) * 180000;
-
-      } else {
-        if (isInDanger) {
-          score += linesCleared * 80000;
-          score += garbageLinesCleared * 60000;
-          score -= effectiveHeight * 25000;
-          score -= standardHoles * 500000;
-        } else {
-          if (linesCleared === 4) {
-            score += 220000 + (botInstance.b2bCount >= 3 ? 50000 : 0);
-          } else if (linesCleared > 0) {
-            if (botInstance.surgeCharge > 10) score += 180000;
-            else if (stackMaxHeight < 14) score -= linesCleared * 45000;
-            else score += linesCleared * 50000;
-          }
-        }
-
-        score -= dependencies * 40000;
-        score -= garbageHeight * 2000;
-        let stackHeightDiff = stackMaxHeight - stackMinHeight;
-        score -= stackHeightDiff * 20000;
-        if (stackHeightDiff <= 2) score += 45000;
-        score -= bumpiness * 400;
-
-        if (!isInDanger) {
-          score -= standardHoles * 350000;
-          score -= coveredBlocks * 500;
-          score -= aggregateHeight * 20;
-          if (botInstance.garbagePending > 0) score += garbageLinesCleared * 30000;
-        }
-
-        if (isInDanger){
-          score -= botInstance.garbagePending * 3000;
-          score -= (stackMaxHeight) * 12000;
-        }
-      }
-
-      return { score, grid: tempGrid };
+    const eff = maxH + s.pend;
+    let v = -holes * 75 - bump * 5 - agg * 1.2 - valley * 14 - wf * 8;
+    if (eff > 10) v -= (eff - 10) * (eff - 10) * 6;
+    if (eff >= 17) v -= 3000;
+    v += Math.min(rdy, 4) * (eff > 12 ? 4 : 12);
+    if (s.b2b > 0) v += 12 + Math.min(s.b2b >= 4 ? s.b2b - 3 : 0, 6) * 10;
+    if (s.combo > 0) v += Math.min(s.combo, 11) * 5;
+    return v;
     }
 
-    function getBestBotMove(botInstance, botType = 'custom', genomeSlot = 1) {
-      if (!botInstance || !botInstance.currentPiece) return null;
-      const maxDepth = Math.max(1, cachedSettings.botDepth);
+    function getBestBotMove(bot, botType = 'custom', genomeSlot = 1) {
+    if (!bot || !bot.currentPiece) return null;
+    const depth = Math.min(6, Math.max(1, cachedSettings.botDepth));
+    const Q = bot.nextQueue.slice(0, 6); // only uses what the Next panel shows (5) + 1
+    const K = depth <= 2 ? 24 : depth === 3 ? 18 : 12;
 
-      function searchDepth(grid, queueIdx, currentDepth, canHold, currentHold, currentPiece) {
-        let candidates = [{ type: currentPiece, hold: false }];
-        if (canHold) {
-          let hType = currentHold;
-          if (!hType && queueIdx < botInstance.nextQueue.length) {
-            hType = botInstance.nextQueue[queueIdx];
-          }
-          if (hType && hType !== currentPiece) {
-            candidates.push({ type: hType, hold: true });
-          }
+    let beam = [{
+        rows: toRows(bot.grid), combo: bot.combo, b2b: bot.b2bCount, pend: bot.garbagePending || 0,
+        hold: bot.holdPieceType, qi: 0, cur: bot.currentPiece.type, canHold: bot.canHold, acc: 0, root: null
+    }];
+
+    for (let d = 0; d < depth; d++) {
+        const next = [];
+        for (const n of beam) {
+        const opts = [{ place: n.cur, hold: false, nh: n.hold, nc: Q[n.qi], nqi: n.qi + 1 }];
+        if (n.canHold) {
+            if (n.hold) opts.push({ place: n.hold, hold: true, nh: n.cur, nc: Q[n.qi], nqi: n.qi + 1 });
+            else opts.push({ place: Q[n.qi], hold: true, nh: n.cur, nc: Q[n.qi + 1], nqi: n.qi + 2 });
         }
-
-        let evaluatedMoves = [];
-
-        for (let pObj of candidates) {
-          let landings = getReachableLandings(botInstance, pObj.type, grid);
-          for (let state of landings) {
-            let evalRes = evaluateMove(botInstance, state, pObj.type, grid, botType, genomeSlot);
-            let score = pObj.hold ? evalRes.score - 50 : evalRes.score;
-
-            evaluatedMoves.push({
-              score: score,
-              move: {
-                x: state.x,
-                y: state.y,
-                rot: state.rot,
-                hold: pObj.hold,
-                type: pObj.type,
-                lastRot: state.lastRot,
-                path: state.path || []
-              },
-              gridAfter: evalRes.grid,
-              usedHold: pObj.hold
+        for (const o of opts) {
+            if (!o.place || (o.hold && o.place === n.cur)) continue;
+            for (const pl of placements(o.place, n.rows)) {
+            const r = simulate(n.rows, pl, n);
+            const acc = n.acc + r.atk * ATK - r.recv * 40 - (o.hold ? 3 : 0) - (r.dead ? 1e6 : 0);
+            next.push({
+                rows: r.rows, combo: r.combo, b2b: r.b2b, pend: r.pend,
+                hold: o.nh, qi: o.nqi, cur: o.nc, canHold: true, acc,
+                total: acc + evalBoard(r.rows, r),
+                root: n.root || { hold: o.hold, type: o.place, path: pathOf(pl) }
             });
-          }
+            }
         }
-
-        if (evaluatedMoves.length === 0) return null;
-        evaluatedMoves.sort((a, b) => b.score - a.score);
-
-        if (currentDepth >= maxDepth) {
-          return currentDepth === 1 ? evaluatedMoves[0].move : evaluatedMoves[0].score;
         }
-
-        let beamWidth = currentDepth === 1 ? 5 : 3;
-        let topBeam = evaluatedMoves.slice(0, beamWidth);
-
-        if (currentDepth === 1) {
-          let bestScore = -Infinity;
-          let bestMove = topBeam[0].move;
-
-          for (let candidate of topBeam) {
-            let nextQueueIdx = queueIdx;
-            let nextHold = currentHold;
-
-            if (candidate.usedHold) {
-              nextHold = currentPiece;
-              nextQueueIdx = !currentHold ? queueIdx + 1 : queueIdx;
-            } else {
-              nextHold = currentHold;
-              nextQueueIdx = queueIdx + 1;
-            }
-
-            let nextPiece = (nextQueueIdx < botInstance.nextQueue.length) ? botInstance.nextQueue[nextQueueIdx] : null;
-            let subScore = 0;
-            if (nextPiece) {
-              subScore = searchDepth(
-                candidate.gridAfter,
-                nextQueueIdx,
-                currentDepth + 1,
-                true,
-                nextHold,
-                nextPiece
-              );
-            }
-
-            let totalScore = candidate.score + (0.75 * (subScore || 0));
-            if (totalScore > bestScore) {
-              bestScore = totalScore;
-              bestMove = candidate.move;
-            }
-          }
-          return bestMove;
-        } else {
-          let bestSubScore = -Infinity;
-          for (let candidate of topBeam) {
-            let nextQueueIdx = queueIdx;
-            let nextHold = currentHold;
-
-            if (candidate.usedHold) {
-              nextHold = currentPiece;
-              nextQueueIdx = !currentHold ? queueIdx + 1 : queueIdx;
-            } else {
-              nextHold = currentHold;
-              nextQueueIdx = queueIdx + 1;
-            }
-
-            let nextPiece = (nextQueueIdx < botInstance.nextQueue.length) ? botInstance.nextQueue[nextQueueIdx] : null;
-            let subScore = candidate.score;
-            if (nextPiece && currentDepth < maxDepth) {
-              let deeperScore = searchDepth(
-                candidate.gridAfter,
-                nextQueueIdx,
-                currentDepth + 1,
-                true,
-                nextHold,
-                nextPiece
-              );
-              subScore += 0.75 * (deeperScore || 0);
-            }
-            if (subScore > bestSubScore) {
-              bestSubScore = subScore;
-            }
-          }
-          return bestSubScore;
-        }
-      }
-
-      return searchDepth(
-        botInstance.grid,
-        0,
-        1,
-        botInstance.canHold,
-        botInstance.holdPieceType,
-        botInstance.currentPiece.type
-      );
+        if (next.length === 0) break;
+        next.sort((a, b) => b.total - a.total);
+        beam = next.length > K ? next.slice(0, K) : next;
+    }
+    return beam[0].root;
     }
 
     function processBotTurn(targetBot, time, botType = 'custom', genomeSlot = 1) {
-      if (
-        !targetBot ||
-        gameOver ||
-        !gameStarted ||
-        isPaused ||
-        isCountingDown ||
-        !targetBot.currentPiece
-      ) {
-        return;
-      }
+    if (!targetBot || gameOver || !gameStarted || isPaused || isCountingDown || !targetBot.currentPiece) return;
+    const botDelay = 1000 / Math.max(0.1, cachedSettings.botSpeed);
+    if (time - targetBot.botTimer < botDelay) return;
+    targetBot.botTimer = time;
 
-      const pps = cachedSettings.botSpeed;
-      const botDelay = 1000 / Math.max(0.1, pps);
-
-      if (time - targetBot.botTimer < botDelay) return;
-      targetBot.botTimer = time;
-
-      try {
+    try {
         const move = getBestBotMove(targetBot, botType, genomeSlot);
-
-        if (!move) {
-          targetBot.hardDrop();
-          return;
-        }
-
-        if (move.hold && targetBot.canHold) {
-          targetBot.holdCurrentPiece();
-        }
-
+        if (!move) { targetBot.hardDrop(); return; }
+        if (move.hold && targetBot.canHold) targetBot.holdCurrentPiece();
         if (!targetBot.currentPiece) return;
-
-        if (move.path && move.path.length > 0) {
-          for (const action of move.path) {
-            if (!targetBot.currentPiece) break;
-            if (action.type === 'left') targetBot.moveLeft();
-            else if (action.type === 'right') targetBot.moveRight();
-            else if (action.type === 'down') targetBot.moveDown();
-            else if (action.type === 'rotateCW') targetBot.rotatePiece(1);
-            else if (action.type === 'rotateCCW') targetBot.rotatePiece(-1);
-            else if (action.type === 'rotate180') targetBot.rotatePiece(2);
-          }
-        } else {
-          const targetRotation = move.rot;
-          const targetX = move.x;
-
-          let rotationSteps = (targetRotation - targetBot.currentPiece.rotation + 4) % 4;
-          if (rotationSteps === 3) rotationSteps = -1;
-
-          if (rotationSteps > 0) {
-            for (let i = 0; i < rotationSteps; i++) targetBot.rotatePiece(1);
-          } else if (rotationSteps < 0) {
-            for (let i = 0; i < Math.abs(rotationSteps); i++) targetBot.rotatePiece(-1);
-          }
-
-          let safety = 0;
-          while (targetBot.currentPiece.x < targetX && safety++ < COLS + 2) {
-            if (!targetBot.moveRight()) break;
-          }
-
-          safety = 0;
-          while (targetBot.currentPiece.x > targetX && safety++ < COLS + 2) {
-            if (!targetBot.moveLeft()) break;
-          }
+        for (const a of move.path) {
+        if (!targetBot.currentPiece) break;
+        if (a === 1) targetBot.moveLeft();
+        else if (a === 2) targetBot.moveRight();
+        else if (a === 3) targetBot.moveDown();
+        else if (a === 4) targetBot.rotatePiece(1);
+        else if (a === 5) targetBot.rotatePiece(-1);
+        else if (a === 6) targetBot.rotatePiece(2);
         }
-
         targetBot.hardDrop();
-
-      } catch (err) {
+    } catch (err) {
         console.error("Bot execution error:", err);
-        if (targetBot.currentPiece) {
-          targetBot.lastActionWasRotate = false;
-          targetBot.hardDrop();
-        }
-      }
+        if (targetBot.currentPiece) { targetBot.lastActionWasRotate = false; targetBot.hardDrop(); }
     }
-
+    }
+    
     //settings
     const STORAGE_KEYS = {
       mode: 'tetris_vs_mode',
