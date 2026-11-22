@@ -1177,6 +1177,14 @@
         // some stuff to do with the bot, idk (claude carry)
         // ================= APM BOT v2: bitboard beam search =================
         const FULL = (1 << COLS) - 1;
+        const CFG = { // tunables (values chosen by self-play tests with and without incoming garbage)
+            ready: 16, readyDanger: 4, wf: 10,         // quad-readiness reward / penalty for blocks in the well
+            quadPen: [80, 25], quadMaxH: 5, quadMaxHoles: 1, iHold: 10, // when safe AND stack <= quadMaxH rows: discourage non-spin 1-3 line clears
+            dangerH: 9, pendDanger: 1,                 // "danger" = height + pending garbage >= dangerH, or any pending garbage
+            holes: 75, cover: 0, bump: 5, agg: 1.2,
+            recvPen: 40, tallHole: false,
+            tsOn: true, tsW: [0.9, 0.6, 0.3], tsCap: 1e9, tsEval: true // T-spin slot credit by T availability (hand / queue / none)
+        };
         const ATK = 20; // value of one attack line (all board terms are scaled to this)
 
         // ---- TETR.IO all-spin detection (shared by the engine and the bot) ----
@@ -1187,15 +1195,15 @@
         // ALL_MINI_PLUS: an immobile T that fails the 3-corner rule also counts as a Mini.
         const ALL_MINI_PLUS = true;
         function detectSpin(type, rot, x, y, kick, collides, filled) {
-        if (type === 'T') {
-            const A = filled(x, y), B = filled(x + 2, y), C = filled(x, y + 2), D = filled(x + 2, y + 2);
-            if (A + B + C + D >= 3) {
-                const front = rot === 0 ? A && B : rot === 1 ? B && D : rot === 2 ? C && D : A && C;
-                return (front || kick === 4) ? 2 : 1;
+            if (type === 'T') {
+                const A = filled(x, y), B = filled(x + 2, y), C = filled(x, y + 2), D = filled(x + 2, y + 2);
+                if (A + B + C + D >= 3) {
+                    const front = rot === 0 ? A && B : rot === 1 ? B && D : rot === 2 ? C && D : A && C;
+                    return (front || kick === 4) ? 2 : 1;
+                }
+                if (!ALL_MINI_PLUS) return 0;
             }
-            if (!ALL_MINI_PLUS) return 0;
-        }
-        return (collides(x - 1, y) && collides(x + 1, y) && collides(x, y - 1) && collides(x, y + 1)) ? 1 : 0;
+            return (collides(x - 1, y) && collides(x + 1, y) && collides(x, y - 1) && collides(x, y + 1)) ? 1 : 0;
         }
 
         const PC = {};
@@ -1287,8 +1295,8 @@
             let spin = 0; // 0 none, 1 mini, 2 full T-spin
             if (pl.f) {
                 spin = detectSpin(pl.type, pl.rot, x, y, pl.f === 2 ? 4 : -1,
-                (cx, cy) => hit(a, cx, cy, rows),
-                (cx, cy) => cx < 0 || cx >= COLS || cy >= ROWS || (cy >= 0 && ((rows[cy] >> cx) & 1)));
+                    (cx, cy) => hit(a, cx, cy, rows),
+                    (cx, cy) => cx < 0 || cx >= COLS || cy >= ROWS || (cy >= 0 && ((rows[cy] >> cx) & 1)));
             }
             const nr = rows.slice();
             for (let i = 0; i < 8; i += 2) {
@@ -1323,6 +1331,7 @@
                     let hole = 0, best = 99;
                     for (let c = 0; c < COLS; c++) {
                         let cnt = 0; for (let r = 0; r < ROWS; r++) cnt += (out[r] >> c) & 1;
+                        if (CFG.tallHole) cnt = 99 - cnt; // pessimistic: gap lands under the tallest column
                         if (cnt < best) { best = cnt; hole = c; }
                     }
                     for (let i = 0; i < ROWS - recv; i++) out[i] = out[i + recv];
@@ -1334,12 +1343,12 @@
 
         function evalBoard(rows, s) {
             const h = new Int8Array(COLS);
-            let holes = 0;
+            let holes = 0, cover = 0;
             for (let c = 0; c < COLS; c++) {
-                let top = -1;
+                let top = -1, fa = 0; // fa = filled cells so far in this column (what sits on top of a hole)
                 for (let r = 0; r < ROWS; r++) {
-                    if ((rows[r] >> c) & 1) { if (top < 0) { top = r; h[c] = ROWS - r; } }
-                    else if (top >= 0) holes++;
+                    if ((rows[r] >> c) & 1) { fa++; if (top < 0) { top = r; h[c] = ROWS - r; } }
+                    else if (top >= 0) { holes++; cover += fa; }
                 }
             }
             let well = 0, wm = 99, maxH = 0, agg = 0;
@@ -1365,13 +1374,22 @@
             for (let r = 0; r < ROWS; r++) { if (rows[r] === tgt) rdy++; if (rows[r] & wb) wf++; }
 
             const eff = maxH + s.pend;
-            let v = -holes * 75 - bump * 5 - agg * 1.2 - valley * 14 - wf * 14;
+            let v = -holes * CFG.holes - cover * CFG.cover - bump * CFG.bump - agg * CFG.agg - valley * 14 - wf * CFG.wf;
             if (eff > 10) v -= (eff - 10) * (eff - 10) * 6;
             if (eff >= 17) v -= 3000;
-            v += Math.min(rdy, 4) * (eff > 11 ? 4 : 20); // stack for quads unless in danger
+            v += Math.min(rdy, 4) * (eff > 11 ? CFG.readyDanger : CFG.ready); // stack for quads unless in danger
             if (s.b2b > 0) v += 12 + Math.min(s.b2b >= 4 ? s.b2b - 3 : 0, 6) * 10;
             if (s.combo > 0) v += Math.min(s.combo, 11) * 5;
             return v;
+        }
+
+        function countHoles(rows) {
+            let hl = 0;
+            for (let c = 0; c < COLS; c++) {
+                let top = false;
+                for (let r = 0; r < ROWS; r++) { if ((rows[r] >> c) & 1) top = true; else if (top) hl++; }
+            }
+            return hl;
         }
 
         function topH(rows) {
@@ -1381,95 +1399,97 @@
 
         // Extra value a T piece could cash in on this board via a FULL T-spin, relative to the current board
         function tspinGain(n, baseEval) {
-        if (topH(n.rows) < 3) return 0;
+            if (!CFG.tsOn || topH(n.rows) < 3) return 0;
             let best = 0;
             for (const pl of placements('T', n.rows)) {
                 if (!pl.f) continue;
                 const r = simulate(n.rows, pl, n);
                 if (r.spin !== 2 || r.n === 0 || r.dead) continue;
-                const g = r.atk * ATK + evalBoard(r.rows, r) - baseEval;
+                const g = Math.min(CFG.tsCap, r.atk * ATK + (CFG.tsEval ? evalBoard(r.rows, r) - baseEval : 0));
                 if (g > best) best = g;
             }
             return best;
         }
 
         function getBestBotMove(bot, botType = 'custom', genomeSlot = 1) {
-        if (!bot || !bot.currentPiece) return null;
-        const depth = Math.min(6, Math.max(1, cachedSettings.botDepth));
-        const Q = bot.nextQueue.slice(0, 6); // only uses what the Next panel shows (5) + 1
-        const K = depth <= 2 ? 24 : depth === 3 ? 18 : 12;
+            if (!bot || !bot.currentPiece) return null;
+            const depth = Math.min(6, Math.max(1, cachedSettings.botDepth));
+            const Q = bot.nextQueue.slice(0, 6); // only uses what the Next panel shows (5) + 1
+            const K = depth <= 2 ? 24 : depth === 3 ? 18 : 12;
 
-        let beam = [{
-            rows: toRows(bot.grid), combo: bot.combo, b2b: bot.b2bCount, pend: bot.garbagePending || 0,
-            hold: bot.holdPieceType, qi: 0, cur: bot.currentPiece.type, canHold: bot.canHold, acc: 0, root: null
-        }];
+            let beam = [{
+                rows: toRows(bot.grid), combo: bot.combo, b2b: bot.b2bCount, pend: bot.garbagePending || 0,
+                hold: bot.holdPieceType, qi: 0, cur: bot.currentPiece.type, canHold: bot.canHold, acc: 0, root: null
+            }];
 
-        for (let d = 0; d < depth; d++) {
-            const next = [];
-            for (const n of beam) {
-            const danger = topH(n.rows) + n.pend >= 11 || n.pend >= 4;
-            const opts = [{ place: n.cur, hold: false, nh: n.hold, nc: Q[n.qi], nqi: n.qi + 1 }];
-            if (n.canHold) {
-                if (n.hold) opts.push({ place: n.hold, hold: true, nh: n.cur, nc: Q[n.qi], nqi: n.qi + 1 });
-                else opts.push({ place: Q[n.qi], hold: true, nh: n.cur, nc: Q[n.qi + 1], nqi: n.qi + 2 });
-            }
-            for (const o of opts) {
-                if (!o.place || (o.hold && o.place === n.cur)) continue;
-                for (const pl of placements(o.place, n.rows)) {
-                const r = simulate(n.rows, pl, n);
-                // Not in danger: discourage non-spin 1-3 line clears (save the well for quads). Exempt: big surge cash-in.
-                let pen = 0;
-                if (!danger && r.n > 0 && r.n < 4 && r.spin === 0 && n.b2b < 9) pen = n.combo >= 2 ? 40 : 120;
-                const acc = n.acc + r.atk * ATK - r.recv * 40 - pen - (o.hold ? 3 : 0) - (r.dead ? 1e6 : 0);
-                const ev = evalBoard(r.rows, r);
-                next.push({
-                    rows: r.rows, combo: r.combo, b2b: r.b2b, pend: r.pend,
-                    hold: o.nh, qi: o.nqi, cur: o.nc, canHold: true, acc, ev,
-                    total: acc + ev + (o.nh === 'I' && !danger ? 15 : 0), // keep an I in hold for quads
-                    root: n.root || { hold: o.hold, type: o.place, path: pathOf(pl) }
-                });
+            for (let d = 0; d < depth; d++) {
+                const next = [];
+                for (const n of beam) {
+                    const th = topH(n.rows);
+                    const danger = th + n.pend >= CFG.dangerH || n.pend >= CFG.pendDanger;
+                    const quadMode = !danger && th <= CFG.quadMaxH && countHoles(n.rows) <= CFG.quadMaxHoles; // clean, low stack: build for quads
+                    const opts = [{ place: n.cur, hold: false, nh: n.hold, nc: Q[n.qi], nqi: n.qi + 1 }];
+                    if (n.canHold) {
+                        if (n.hold) opts.push({ place: n.hold, hold: true, nh: n.cur, nc: Q[n.qi], nqi: n.qi + 1 });
+                        else opts.push({ place: Q[n.qi], hold: true, nh: n.cur, nc: Q[n.qi + 1], nqi: n.qi + 2 });
+                    }
+                    for (const o of opts) {
+                        if (!o.place || (o.hold && o.place === n.cur)) continue;
+                        for (const pl of placements(o.place, n.rows)) {
+                            const r = simulate(n.rows, pl, n);
+                            // Not in danger: discourage non-spin 1-3 line clears (save the well for quads). Exempt: big surge cash-in.
+                            let pen = 0;
+                            if (quadMode && r.n > 0 && r.n < 4 && r.spin === 0 && n.b2b < 9) pen = n.combo >= 2 ? CFG.quadPen[1] : CFG.quadPen[0];
+                            const acc = n.acc + r.atk * ATK - r.recv * CFG.recvPen - pen - (o.hold ? 3 : 0) - (r.dead ? 1e6 : 0);
+                            const ev = evalBoard(r.rows, r);
+                            next.push({
+                                rows: r.rows, combo: r.combo, b2b: r.b2b, pend: r.pend,
+                                hold: o.nh, qi: o.nqi, cur: o.nc, canHold: true, acc, ev,
+                                total: acc + ev + (o.nh === 'I' && !danger ? CFG.iHold : 0), // keep an I in hold for quads
+                                root: n.root || { hold: o.hold, type: o.place, path: pathOf(pl) }
+                            });
+                        }
+                    }
                 }
+                if (next.length === 0) break;
+                next.sort((a, b) => b.total - a.total);
+                const pool = next.length > K * 1.5 ? next.slice(0, Math.ceil(K * 1.5)) : next;
+                // T-spin spotting: boards with a usable T-slot get credit, weighted by how soon a T is available
+                for (const c of pool) {
+                    const w = (c.cur === 'T' || c.hold === 'T') ? CFG.tsW[0] : Q.indexOf('T', c.qi) >= 0 ? CFG.tsW[1] : CFG.tsW[2];
+                    c.rank = c.total + w * tspinGain(c, c.ev);
+                }
+                pool.sort((a, b) => b.rank - a.rank);
+                beam = pool.length > K ? pool.slice(0, K) : pool;
             }
-            }
-            if (next.length === 0) break;
-            next.sort((a, b) => b.total - a.total);
-            const pool = next.length > K * 1.5 ? next.slice(0, Math.ceil(K * 1.5)) : next;
-            // T-spin spotting: boards with a usable T-slot get credit, weighted by how soon a T is available
-            for (const c of pool) {
-            const w = (c.cur === 'T' || c.hold === 'T') ? 0.9 : Q.indexOf('T', c.qi) >= 0 ? 0.6 : 0.3;
-            c.rank = c.total + w * tspinGain(c, c.ev);
-            }
-            pool.sort((a, b) => b.rank - a.rank);
-            beam = pool.length > K ? pool.slice(0, K) : pool;
-        }
-        return beam[0].root;
+            return beam[0].root;
         }
 
         function processBotTurn(targetBot, time, botType = 'custom', genomeSlot = 1) {
-        if (!targetBot || gameOver || !gameStarted || isPaused || isCountingDown || !targetBot.currentPiece) return;
-        const botDelay = 1000 / Math.max(0.1, cachedSettings.botSpeed);
-        if (time - targetBot.botTimer < botDelay) return;
-        targetBot.botTimer = time;
+            if (!targetBot || gameOver || !gameStarted || isPaused || isCountingDown || !targetBot.currentPiece) return;
+            const botDelay = 1000 / Math.max(0.1, cachedSettings.botSpeed);
+            if (time - targetBot.botTimer < botDelay) return;
+            targetBot.botTimer = time;
 
-        try {
-            const move = getBestBotMove(targetBot, botType, genomeSlot);
-            if (!move) { targetBot.hardDrop(); return; }
-            if (move.hold && targetBot.canHold) targetBot.holdCurrentPiece();
-            if (!targetBot.currentPiece) return;
-            for (const a of move.path) {
-                if (!targetBot.currentPiece) break;
-                if (a === 1) targetBot.moveLeft();
-                else if (a === 2) targetBot.moveRight();
-                else if (a === 3) targetBot.moveDown();
-                else if (a === 4) targetBot.rotatePiece(1);
-                else if (a === 5) targetBot.rotatePiece(-1);
-                else if (a === 6) targetBot.rotatePiece(2);
+            try {
+                const move = getBestBotMove(targetBot, botType, genomeSlot);
+                if (!move) { targetBot.hardDrop(); return; }
+                if (move.hold && targetBot.canHold) targetBot.holdCurrentPiece();
+                if (!targetBot.currentPiece) return;
+                for (const a of move.path) {
+                    if (!targetBot.currentPiece) break;
+                    if (a === 1) targetBot.moveLeft();
+                    else if (a === 2) targetBot.moveRight();
+                    else if (a === 3) targetBot.moveDown();
+                    else if (a === 4) targetBot.rotatePiece(1);
+                    else if (a === 5) targetBot.rotatePiece(-1);
+                    else if (a === 6) targetBot.rotatePiece(2);
+                }
+                targetBot.hardDrop();
+            } catch (err) {
+                console.error("Bot execution error:", err);
+                if (targetBot.currentPiece) { targetBot.lastActionWasRotate = false; targetBot.hardDrop(); }
             }
-            targetBot.hardDrop();
-        } catch (err) {
-            console.error("Bot execution error:", err);
-            if (targetBot.currentPiece) { targetBot.lastActionWasRotate = false; targetBot.hardDrop(); }
-        }
         }
         //settings
         const STORAGE_KEYS = {
