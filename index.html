@@ -1752,13 +1752,13 @@
             const overlaySub = document.getElementById('overlay-sub');
             if (cachedSettings.mode === 'vs') {
                 if (loserEngine.isBot) {
-                    overlayTitle.textContent = "YOU WIN!";
+                    overlayTitle.textContent = "VICTORY";
                     overlayTitle.className = "win";
-                    overlaySub.textContent = "!!";
+                    overlaySub.textContent = "you got lucky";
                 } else {
-                    overlayTitle.textContent = "GAME OVER";
+                    overlayTitle.textContent = "DEFEAT";
                     overlayTitle.className = "";
-                    overlaySub.textContent = "Lol";
+                    overlaySub.textContent = "haha";
                 }
             } else {
                 overlayTitle.textContent = "GAME OVER";
