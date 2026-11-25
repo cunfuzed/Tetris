@@ -17,7 +17,7 @@
   function boot() {
 
   // ============ CONFIG: your Cloudflare tunnel URL ============
-  const API = 'https://appropriations-patients-headers-examinations.trycloudflare.com';
+  const API = 'https://restoration-basketball-prescribed-jpeg.trycloudflare.com';
   // ============================================================
 
   const LS_URL = 'tetris_online_url';
